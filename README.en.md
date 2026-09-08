@@ -32,6 +32,7 @@ Rather than focusing on one big feature, this is a personal toolkit-style projec
 - **Text-to-Speech**: Turns the entire TTS feature on or off. When off, the global hotkey is disabled and the settings window's TTS tab is greyed out.
 - **GifTalk**: Turns the entire GifTalk feature on or off. When off, the on-screen overlay disappears and the settings window's GifTalk tab is greyed out.
 
+
 ### 2. TTS Tab
 
 #### 2-1. Global Hotkey
@@ -71,6 +72,7 @@ Rather than focusing on one big feature, this is a personal toolkit-style projec
 
 - When checked, the same speech is played simultaneously through both the virtual device and **your computer's default speaker/headphones**. This lets you hear directly what you're currently "sending out" via TTS. When unchecked, only the virtual device plays the audio — you won't hear it yourself.
 
+
 ### 3. GifTalk Tab
 
 #### 3-1. GIF URL
@@ -83,7 +85,7 @@ Rather than focusing on one big feature, this is a personal toolkit-style projec
 
 - Toggling **Edit Mode** on shows a blue border box over the overlay, along with check (✓) / cancel (✕) buttons in the bottom-right corner.
 - **Moving position**: Click anywhere inside the border box with the left mouse button and drag to move the entire overlay wherever you like.
-- **Resizing**: In the current version, there's no way to resize the overlay by dragging it directly — instead, you set the exact position and size by typing numbers into the **X / Y / Width / Height** fields below. Values are reflected on the overlay in real time.
+- **Resizing**: You can either drag the overlay directly, or set the exact position and size by typing numbers into the **X / Y / Width / Height** fields below. Values are reflected on the overlay in real time.
   - X, Y: The overlay's coordinates (in pixels), measured from the top-left of the screen.
   - Width, Height: The overlay's width/height (in pixels, minimum 80).
 - **✓ (Check) button**: Saves the current position/size as-is and exits edit mode.
@@ -94,6 +96,7 @@ Rather than focusing on one big feature, this is a personal toolkit-style projec
 - Outside of edit mode, the overlay normally appears sharp, but **automatically fades (becomes semi-transparent) and lets clicks pass through to the window underneath when your cursor moves over it**. It returns to normal once the cursor leaves.
 - In other words, even though the overlay is always floating on top of your screen, it never gets in the way of clicking or interacting with the window beneath it.
 
+
 ### 4. Taskbar (Tray) Icon
 
 You can control ExCord through its tray icon, located in the bottom-right corner of the taskbar.
@@ -103,6 +106,7 @@ You can control ExCord through its tray icon, located in the bottom-right corner
   - **Settings**: Opens the settings window.
   - **Overlay: ON/OFF**: A quick toggle to turn the overlay on or off without opening the settings window.
   - **Exit**: Fully quits the program. (Any speech playback in progress is safely cleaned up before exiting.)
+
 
 ### 5. How Settings Are Saved
 
