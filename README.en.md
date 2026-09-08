@@ -170,11 +170,11 @@ Laid out step by step so that even first-time users can just follow along.
 - **False positives from some antivirus programs**: Because the app uses global hotkey hooking and screen overlays (always-on-top, click-through, etc.), some antivirus software may misclassify it as suspicious behavior. The source code is public, so feel free to check it out yourself if you're curious.
 - **Why can't the other person hear the sound?**: The most common causes are (1) the virtual audio cable isn't installed, (2) ExCord's Virtual Output Device and Discord's input device are set to different devices, or (3) Discord's "Advanced Voice Activity" setting is either too sensitive or not sensitive enough.
 - **Test environment (developer's PC specs)**: Below is the environment actually used for testing during development. For reference only — most lower-spec systems should still work fine.
-  - OS: `[Enter Windows version/build number here]`
-  - CPU: `[Enter CPU model here]`
-  - RAM: `[Enter RAM capacity here]`
-  - GPU: `[Enter GPU model here, affects WebView2 rendering]`
-  - Virtual audio cable used: `[Enter product name here, e.g., VB-CABLE]`
+  - OS: `Windows 11 Home 64bit`
+  - CPU: `AMD Ryzen 9 9950X 16-Core Processor (4.30 GHz)`
+  - RAM: `64GB 6000MT/s`
+  - GPU: `NVIDIA GeForce RTX 5070 Ti (16 GB)`
+  - Virtual audio cable used: `StealSeries GG`
 - **Automatic update check**: Every time you open the settings window, it automatically checks GitHub for the latest release. If a new version is available, a blinking blue "New version available" message appears in the bottom-left of the settings window — click it to go to the release page. (It doesn't install automatically; you'll need to download and overwrite-install the new version yourself.)
 - **Log files**: If an error occurs, a log file is saved in the `%AppData%\ExCord\` folder. Please attach it when reporting a bug — it helps a lot with diagnosing the issue.
 - **Known limitations**
