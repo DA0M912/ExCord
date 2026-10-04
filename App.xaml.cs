@@ -13,17 +13,11 @@ public partial class App : Application
     private GlobalHotkeyService? _hotkeyService;
     private TtsService? _ttsService;
     private AudioOutputService? _audioOutputService;
+    private OverlayManager? _overlayManager;
     private InputWindow? _inputWindow;
     private SettingsWindow? _settingsWindow;
-    private GifTalkOverlayWindow? _gifTalkOverlayWindow;
     private AppSettings _settings = new();
     private AutoStartService _autoStartService = new();
-    private string? _lastAppliedGifTalkUrl;
-    private bool _lastAppliedGifTalkEnabled;
-    private double _lastAppliedGifTalkX;
-    private double _lastAppliedGifTalkY;
-    private double _lastAppliedGifTalkWidth;
-    private double _lastAppliedGifTalkHeight;
     private CancellationTokenSource? _textSubmissionCancellation;
     private const int DispatcherExceptionLimit = 3;
     private static readonly TimeSpan DispatcherExceptionWindow = TimeSpan.FromSeconds(10);
@@ -52,6 +46,7 @@ public partial class App : Application
             _ttsService.SetPreferredVoice(_settings.TtsVoiceId, _settings.TtsVoiceIsOneCore);
             _audioOutputService = new AudioOutputService();
             _hotkeyService = new GlobalHotkeyService();
+            _overlayManager = new OverlayManager();
             _ttsService.VoiceFallback += (_, message) => ShowTrayNotification(message);
             _audioOutputService.PlaybackIssue += (_, message) => ShowTrayNotification(message);
             _hotkeyService.HotkeyPressed += (_, _) => ShowInputOverlay();
@@ -155,11 +150,11 @@ public partial class App : Application
             TryCleanup(trayIcon.Dispose, "Tray icon disposal");
         }
 
-        var gifTalkOverlayWindow = _gifTalkOverlayWindow;
-        _gifTalkOverlayWindow = null;
-        if (gifTalkOverlayWindow is not null)
+        var overlayManager = _overlayManager;
+        _overlayManager = null;
+        if (overlayManager is not null)
         {
-            TryCleanup(gifTalkOverlayWindow.Close, "GifTalk overlay disposal");
+            TryCleanup(overlayManager.Dispose, "Overlay manager disposal");
         }
     }
 
@@ -309,7 +304,7 @@ public partial class App : Application
     {
         if (_settingsWindow is null)
         {
-            _settingsWindow = new SettingsWindow(_settings, _gifTalkOverlayWindow);
+            _settingsWindow = new SettingsWindow(_settings, _overlayManager?.GetPrimaryWindow());
             _settingsWindow.Closed += (_, _) =>
             {
                 _settingsWindow = null;
@@ -327,11 +322,13 @@ public partial class App : Application
                 }
 
                 ApplyGifTalkState(updatedSettings);
+                _settingsWindow?.SetGifTalkOverlayWindow(_overlayManager?.GetPrimaryWindow());
             };
             _settingsWindow.GifTalkGeometryChanged += (_, updatedSettings) =>
             {
                 _settings = updatedSettings;
                 ApplyGifTalkState(updatedSettings);
+                _settingsWindow?.SetGifTalkOverlayWindow(_overlayManager?.GetPrimaryWindow());
             };
         }
 
@@ -341,76 +338,8 @@ public partial class App : Application
 
     private void ApplyGifTalkState(AppSettings settings)
     {
-        if (!settings.GifTalkEnabled)
-        {
-            if (_gifTalkOverlayWindow is not null)
-            {
-                _gifTalkOverlayWindow.Close();
-                _gifTalkOverlayWindow = null;
-            }
-
-            _settingsWindow?.SetGifTalkOverlayWindow(_gifTalkOverlayWindow);
-            _lastAppliedGifTalkUrl = settings.GifTalkUrl;
-            _lastAppliedGifTalkEnabled = false;
-            _lastAppliedGifTalkX = settings.GifTalkX;
-            _lastAppliedGifTalkY = settings.GifTalkY;
-            _lastAppliedGifTalkWidth = settings.GifTalkWidth;
-            _lastAppliedGifTalkHeight = settings.GifTalkHeight;
-            return;
-        }
-
-        var overlayWasCreated = false;
-        if (_gifTalkOverlayWindow is null)
-        {
-            overlayWasCreated = true;
-            _gifTalkOverlayWindow = new GifTalkOverlayWindow(settings);
-            _gifTalkOverlayWindow.Closed += (_, _) =>
-            {
-                _gifTalkOverlayWindow = null;
-                _settingsWindow?.SetGifTalkOverlayWindow(null);
-            };
-        }
-
-        _settingsWindow?.SetGifTalkOverlayWindow(_gifTalkOverlayWindow);
-
-        var geometryChanged =
-            _lastAppliedGifTalkX != settings.GifTalkX ||
-            _lastAppliedGifTalkY != settings.GifTalkY ||
-            _lastAppliedGifTalkWidth != settings.GifTalkWidth ||
-            _lastAppliedGifTalkHeight != settings.GifTalkHeight;
-
-        var urlChanged = !string.Equals(_lastAppliedGifTalkUrl, settings.GifTalkUrl, StringComparison.OrdinalIgnoreCase);
-        var enabledChanged = _lastAppliedGifTalkEnabled != settings.GifTalkEnabled;
-
-        if (overlayWasCreated || geometryChanged)
-        {
-            _gifTalkOverlayWindow.UpdateFromSettings();
-        }
-
-        var targetUrl = string.IsNullOrWhiteSpace(settings.GifTalkUrl)
-            ? _lastAppliedGifTalkUrl
-            : settings.GifTalkUrl;
-
-        if (enabledChanged || urlChanged || overlayWasCreated)
-        {
-            if (!string.IsNullOrWhiteSpace(targetUrl))
-            {
-                _gifTalkOverlayWindow.NavigateToUrl(targetUrl);
-            }
-        }
-
-        if (overlayWasCreated || enabledChanged)
-        {
-            _gifTalkOverlayWindow.Show();
-            _gifTalkOverlayWindow.Activate();
-        }
-
-        _lastAppliedGifTalkUrl = settings.GifTalkUrl;
-        _lastAppliedGifTalkEnabled = settings.GifTalkEnabled;
-        _lastAppliedGifTalkX = settings.GifTalkX;
-        _lastAppliedGifTalkY = settings.GifTalkY;
-        _lastAppliedGifTalkWidth = settings.GifTalkWidth;
-        _lastAppliedGifTalkHeight = settings.GifTalkHeight;
+        _overlayManager?.Apply(settings);
+        _settingsWindow?.SetGifTalkOverlayWindow(_overlayManager?.GetPrimaryWindow());
     }
 
     private void ShowInputOverlay()

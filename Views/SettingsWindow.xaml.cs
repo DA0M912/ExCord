@@ -21,6 +21,7 @@ public partial class SettingsWindow : Window
     private readonly DispatcherTimer _coreSettingsSaveTimer;
     private bool _isSyncingGifTalkFields;
     private bool _isInitializingCoreFields;
+    private bool _isUpdatingLanguageSelection;
     private string? _latestReleaseUrl;
     private readonly CancellationTokenSource _updateCheckCancellation = new();
 
@@ -33,6 +34,7 @@ public partial class SettingsWindow : Window
         _isInitializingCoreFields = true;
         InitializeComponent();
         _settings = settings;
+        ApplyLocalizedTexts();
         _gifTalkGeometrySaveTimer = new DispatcherTimer
         {
             Interval = TimeSpan.FromMilliseconds(300)
@@ -64,6 +66,8 @@ public partial class SettingsWindow : Window
 
         KeyComboBox.ItemsSource = Enum.GetValues(typeof(Key)).Cast<Key>().Where(k => k != Key.None && k != Key.System && k != Key.LWin && k != Key.RWin).ToList();
         KeyComboBox.SelectedItem = _settings.HotkeyKey;
+
+        InitializeLanguageOptions();
 
         CtrlCheckBox.IsChecked = (_settings.HotkeyModifiers & ModifierKeys.Control) == ModifierKeys.Control;
         AltCheckBox.IsChecked = (_settings.HotkeyModifiers & ModifierKeys.Alt) == ModifierKeys.Alt;
@@ -559,10 +563,99 @@ public partial class SettingsWindow : Window
         SettingsSaved?.Invoke(this, _settings);
     }
 
+    private void InitializeLanguageOptions()
+    {
+        _isUpdatingLanguageSelection = true;
+        try
+        {
+            LanguageComboBox.DisplayMemberPath = nameof(LanguageOption.DisplayName);
+            LanguageComboBox.SelectedValuePath = nameof(LanguageOption.Language);
+            LanguageComboBox.ItemsSource = BuildLanguageOptions();
+            LanguageComboBox.SelectedValue = _settings.Language;
+        }
+        finally
+        {
+            _isUpdatingLanguageSelection = false;
+        }
+    }
+
+    private List<LanguageOption> BuildLanguageOptions()
+    {
+        var text = LocalizationService.Text;
+        return
+        [
+            new LanguageOption(AppLanguage.English, text.LanguageEnglish),
+            new LanguageOption(AppLanguage.Korean, text.LanguageKorean)
+        ];
+    }
+
+    public void ApplyLocalizedTexts()
+    {
+        var text = LocalizationService.Text;
+        Title = text.SettingsWindowTitle;
+        GeneralTabItem.Header = text.TabGeneral;
+        TtsTabItem.Header = text.TabTts;
+        GifTalkTabItem.Header = text.TabGifTalk;
+
+        ApplicationSectionTextBlock.Text = text.SectionApplication;
+        FeaturesSectionTextBlock.Text = text.SectionFeatures;
+        LanguageSectionTextBlock.Text = text.SectionLanguage;
+        AutoStartToggleButton.Content = text.StartWithWindows;
+        TtsToggleButton.Content = text.TextToSpeech;
+        GifTalkToggleButton.Content = text.GifTalk;
+
+        GlobalHotkeyTextBlock.Text = text.GlobalHotkey;
+        TtsVoiceTextBlock.Text = text.TtsVoice;
+        VirtualOutputDeviceTextBlock.Text = text.VirtualOutputDevice;
+        OutputVolumeTextBlock.Text = text.OutputVolume;
+        MonitorEnabledCheckBox.Content = text.MonitorSound;
+
+        GifUrlTextBlock.Text = text.GifUrl;
+        ApplyGifTalkUrlButton.Content = text.Apply;
+        GifTalkEditModeToggleButton.Content = text.EditMode;
+        GifTalkXTextBlock.Text = text.AxisX;
+        GifTalkYTextBlock.Text = text.AxisY;
+        GifTalkWidthTextBlock.Text = text.SizeWidth;
+        GifTalkHeightTextBlock.Text = text.SizeHeight;
+
+        NewVersionTextBlock.Text = text.NewVersionAvailable;
+        CloseButton.Content = text.Close;
+
+        InitializeLanguageOptions();
+    }
+
+    private void LanguageComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_isUpdatingLanguageSelection || _isInitializingCoreFields)
+        {
+            return;
+        }
+
+        if (LanguageComboBox.SelectedValue is not AppLanguage selectedLanguage)
+        {
+            return;
+        }
+
+        if (_settings.Language == selectedLanguage)
+        {
+            return;
+        }
+
+        _settings.Language = selectedLanguage;
+        LocalizationService.SetLanguage(selectedLanguage);
+        ApplyLocalizedTexts();
+        SaveSettings();
+    }
+
     private void SaveSettings()
     {
         var selectedVoice = VoiceComboBox.SelectedItem as VoiceOption;
         var selectedKey = KeyComboBox.SelectedItem as Key?;
+
+        if (LanguageComboBox.SelectedValue is AppLanguage selectedLanguage)
+        {
+            _settings.Language = selectedLanguage;
+        }
 
         _settings.HotkeyModifiers = BuildModifiers();
         _settings.HotkeyKey = selectedKey ?? _settings.HotkeyKey;
@@ -760,5 +853,17 @@ public partial class SettingsWindow : Window
         {
             return DisplayName;
         }
+    }
+
+    private sealed class LanguageOption
+    {
+        public LanguageOption(AppLanguage language, string displayName)
+        {
+            Language = language;
+            DisplayName = displayName;
+        }
+
+        public AppLanguage Language { get; }
+        public string DisplayName { get; }
     }
 }

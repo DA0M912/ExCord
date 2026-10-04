@@ -1,4 +1,5 @@
-﻿using System.Windows;
+﻿using ExCord.Services;
+using System.Windows;
 using System.Windows.Input;
 using KeyEventArgs = System.Windows.Input.KeyEventArgs;
 
@@ -14,6 +15,7 @@ public partial class InputWindow : Window
     public InputWindow()
     {
         InitializeComponent();
+        ApplyLocalizedTexts();
 
         Loaded += (_, _) =>
         {
@@ -37,6 +39,13 @@ public partial class InputWindow : Window
         InputTextBox.Focus();
         InputTextBox.SelectAll();
         Topmost = true;
+    }
+
+    public void ApplyLocalizedTexts()
+    {
+        var text = LocalizationService.Text;
+        Title = text.InputWindowTitle;
+        InputHeaderTextBlock.Text = text.InputHeader;
     }
 
     private void InputWindow_KeyDown(object sender, KeyEventArgs e)

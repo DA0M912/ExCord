@@ -16,6 +16,7 @@ public partial class GifTalkOverlayWindow : Window
     private const int WS_EX_TRANSPARENT = 0x00000020;
     private const int WS_EX_LAYERED = 0x00080000;
     private const int WS_EX_TOOLWINDOW = 0x00000080;
+    private static readonly IntPtr HwndTopmost = new(-1);
     private const int WM_NCHITTEST = 0x0084;
     private const int HTLEFT = 10;
     private const int HTRIGHT = 11;
@@ -31,12 +32,25 @@ public partial class GifTalkOverlayWindow : Window
     private const double FullTransparencyDistanceRatio = 0.50d;
     private const int HoverOpacitySteps = 10;
     private const int HoverUpdateIntervalMilliseconds = 50;
+    private const int TopmostEnforceIntervalMilliseconds = 500;
+    private const int NavigationWatchdogTimeoutMilliseconds = 15000;
+    private const int NavigationRetryDelayMilliseconds = 2000;
+    private const int MaxNavigationRetries = 5;
 
     private readonly DispatcherTimer _hoverTimer;
-    private readonly AppSettings _settings;
+    private readonly DispatcherTimer _topmostEnforceTimer;
+    private readonly DispatcherTimer _navigationWatchdogTimer;
+    private readonly DispatcherTimer _navigationRetryTimer;
+    private readonly OverlayItemSettings _overlay;
+    private readonly Action? _persistOverlayChanges;
     private bool _isEditMode;
     private bool _isClosed;
     private string? _pendingUrl;
+    private string? _lastRequestedUrl;
+    private string? _activeNavigationUrl;
+    private bool _isNavigationInProgress;
+    private bool _isRetryPending;
+    private int _navigationRetryCount;
     private Rect? _pendingGeometry;
     private int _startupHoverGraceTicks;
     private Rect _editModeStartGeometry;
@@ -59,6 +73,9 @@ public partial class GifTalkOverlayWindow : Window
 
     public event EventHandler? GeometryChanged;
 
+    public bool IsEnabledOverlay => _overlay.Enabled;
+    public string OverlayId => _overlay.Id;
+
     public bool IsEditMode
     {
         get => _isEditMode;
@@ -74,10 +91,10 @@ public partial class GifTalkOverlayWindow : Window
             if (_isEditMode)
             {
                 _editModeStartGeometry = GetGeometryInPixels();
-                _editModeStartSettingsX = _settings.GifTalkX;
-                _editModeStartSettingsY = _settings.GifTalkY;
-                _editModeStartSettingsWidth = _settings.GifTalkWidth;
-                _editModeStartSettingsHeight = _settings.GifTalkHeight;
+                _editModeStartSettingsX = _overlay.X;
+                _editModeStartSettingsY = _overlay.Y;
+                _editModeStartSettingsWidth = _overlay.Width;
+                _editModeStartSettingsHeight = _overlay.Height;
                 DisableClickThrough();
                 UpdateEditorVisualState();
                 _hoverTimer.Stop();
@@ -85,7 +102,7 @@ public partial class GifTalkOverlayWindow : Window
             }
 
             UpdateEditorVisualState();
-            if (_settings.GifTalkEnabled)
+            if (_overlay.Enabled)
             {
                 _startupHoverGraceTicks = 3;
                 _hoverTimer.Start();
@@ -93,10 +110,12 @@ public partial class GifTalkOverlayWindow : Window
         }
     }
 
-    public GifTalkOverlayWindow(AppSettings settings)
+    public GifTalkOverlayWindow(OverlayItemSettings overlay, Action? persistOverlayChanges = null)
     {
         InitializeComponent();
-        _settings = settings;
+        _overlay = overlay;
+        _persistOverlayChanges = persistOverlayChanges;
+        ApplyLocalizedTexts();
         MinWidth = MinimumResizeSize;
         MinHeight = MinimumResizeSize;
         ResizeMode = ResizeMode.CanResize;
@@ -105,29 +124,56 @@ public partial class GifTalkOverlayWindow : Window
             Interval = TimeSpan.FromMilliseconds(HoverUpdateIntervalMilliseconds)
         };
         _hoverTimer.Tick += HoverTimer_Tick;
+        _topmostEnforceTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(TopmostEnforceIntervalMilliseconds)
+        };
+        _topmostEnforceTimer.Tick += (_, _) => EnsureTopmost();
+        _navigationWatchdogTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(NavigationWatchdogTimeoutMilliseconds)
+        };
+        _navigationWatchdogTimer.Tick += (_, _) => HandleNavigationWatchdogTimeout();
+        _navigationRetryTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(NavigationRetryDelayMilliseconds)
+        };
+        _navigationRetryTimer.Tick += (_, _) => RetryPendingNavigation();
         LocationChanged += (_, _) => NotifyGeometryChanged();
         SizeChanged += (_, _) => NotifyGeometryChanged();
+        Activated += (_, _) => EnsureTopmost();
+        Deactivated += (_, _) => Dispatcher.BeginInvoke(EnsureTopmost, DispatcherPriority.Background);
 
         WebView.CoreWebView2InitializationCompleted += (_, _) =>
         {
             if (WebView.CoreWebView2 is not null)
             {
-                WebView.CoreWebView2.NavigationCompleted += (_, _) => ApplyWebViewOpacity();
+                WebView.CoreWebView2.NavigationStarting += CoreWebView2_NavigationStarting;
+                WebView.CoreWebView2.NavigationCompleted += CoreWebView2_NavigationCompleted;
                 ApplyWebViewOpacity();
             }
 
             if (!string.IsNullOrWhiteSpace(_pendingUrl))
             {
-                NavigateToUrl(_pendingUrl);
+                var pendingUrl = _pendingUrl;
                 _pendingUrl = null;
+                NavigateToUrl(pendingUrl);
             }
         };
 
         Loaded += (_, _) =>
         {
             UpdateWindowStyle();
+            EnsureTopmost();
         };
 
+    }
+
+    public void ApplyLocalizedTexts()
+    {
+        var text = LocalizationService.Text;
+        ConfirmEditButton.ToolTip = text.EditConfirmToolTip;
+        CancelEditButton.ToolTip = text.EditCancelToolTip;
     }
 
     protected override void OnSourceInitialized(EventArgs e)
@@ -149,6 +195,9 @@ public partial class GifTalkOverlayWindow : Window
     {
         _isClosed = true;
         _hoverTimer.Stop();
+        _topmostEnforceTimer.Stop();
+        _navigationWatchdogTimer.Stop();
+        _navigationRetryTimer.Stop();
         DisposeWebViewResources();
         base.OnClosed(e);
     }
@@ -186,10 +235,10 @@ public partial class GifTalkOverlayWindow : Window
     public void BeginEditMode()
     {
         _editModeStartGeometry = GetGeometryInPixels();
-        _editModeStartSettingsX = _settings.GifTalkX;
-        _editModeStartSettingsY = _settings.GifTalkY;
-        _editModeStartSettingsWidth = _settings.GifTalkWidth;
-        _editModeStartSettingsHeight = _settings.GifTalkHeight;
+        _editModeStartSettingsX = _overlay.X;
+        _editModeStartSettingsY = _overlay.Y;
+        _editModeStartSettingsWidth = _overlay.Width;
+        _editModeStartSettingsHeight = _overlay.Height;
         IsEditMode = true;
     }
 
@@ -203,10 +252,11 @@ public partial class GifTalkOverlayWindow : Window
         if (!saveChanges)
         {
             ApplyGeometry(_editModeStartGeometry.X, _editModeStartGeometry.Y, _editModeStartGeometry.Width, _editModeStartGeometry.Height);
-            _settings.GifTalkX = _editModeStartSettingsX;
-            _settings.GifTalkY = _editModeStartSettingsY;
-            _settings.GifTalkWidth = _editModeStartSettingsWidth;
-            _settings.GifTalkHeight = _editModeStartSettingsHeight;
+            _overlay.X = _editModeStartSettingsX;
+            _overlay.Y = _editModeStartSettingsY;
+            _overlay.Width = _editModeStartSettingsWidth;
+            _overlay.Height = _editModeStartSettingsHeight;
+            _persistOverlayChanges?.Invoke();
         }
         else
         {
@@ -237,17 +287,17 @@ public partial class GifTalkOverlayWindow : Window
 
     public void UpdateFromSettings()
     {
-        ApplyGeometry(_settings.GifTalkX, _settings.GifTalkY, _settings.GifTalkWidth, _settings.GifTalkHeight);
+        ApplyGeometry(_overlay.X, _overlay.Y, _overlay.Width, _overlay.Height);
     }
 
     public void SaveCurrentGeometryToSettings()
     {
         var bounds = GetGeometryInPixels();
-        _settings.GifTalkX = bounds.X;
-        _settings.GifTalkY = bounds.Y;
-        _settings.GifTalkWidth = bounds.Width;
-        _settings.GifTalkHeight = bounds.Height;
-        _settings.Save();
+        _overlay.X = bounds.X;
+        _overlay.Y = bounds.Y;
+        _overlay.Width = bounds.Width;
+        _overlay.Height = bounds.Height;
+        _persistOverlayChanges?.Invoke();
     }
 
     public Rect GetGeometryInPixels()
@@ -273,25 +323,18 @@ public partial class GifTalkOverlayWindow : Window
             return;
         }
 
+        _lastRequestedUrl = url;
+        _navigationRetryCount = 0;
+        _isRetryPending = false;
+        _navigationRetryTimer.Stop();
         _pendingUrl = url;
 
         if (WebView.CoreWebView2 is not null)
         {
             _pendingUrl = null;
-            try
+            if (!TryNavigate(url))
             {
-                WebView.CoreWebView2.Navigate(url);
-            }
-            catch
-            {
-                try
-                {
-                    WebView.CoreWebView2.Navigate("about:blank");
-                }
-                catch
-                {
-                    // ignored
-                }
+                ScheduleNavigationRetry(url, "Initial navigation failed.");
             }
 
             return;
@@ -300,17 +343,175 @@ public partial class GifTalkOverlayWindow : Window
         _ = EnsureCoreWebView2Async();
     }
 
+    private bool TryNavigate(string url)
+    {
+        if (WebView.CoreWebView2 is null)
+        {
+            return false;
+        }
+
+        try
+        {
+            WebView.CoreWebView2.Navigate(url);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            LoggingService.LogException(ex, "GifTalkOverlayWindow.TryNavigate");
+            try
+            {
+                WebView.CoreWebView2.Navigate("about:blank");
+            }
+            catch
+            {
+                // ignored
+            }
+
+            return false;
+        }
+    }
+
+    private void CoreWebView2_NavigationStarting(object? sender, Microsoft.Web.WebView2.Core.CoreWebView2NavigationStartingEventArgs e)
+    {
+        _isNavigationInProgress = true;
+        _activeNavigationUrl = string.IsNullOrWhiteSpace(e.Uri) ? _lastRequestedUrl : e.Uri;
+        _navigationWatchdogTimer.Stop();
+        _navigationWatchdogTimer.Start();
+    }
+
+    private void CoreWebView2_NavigationCompleted(object? sender, Microsoft.Web.WebView2.Core.CoreWebView2NavigationCompletedEventArgs e)
+    {
+        _isNavigationInProgress = false;
+        _navigationWatchdogTimer.Stop();
+        ApplyWebViewOpacity();
+
+        if (e.IsSuccess)
+        {
+            _navigationRetryCount = 0;
+            _isRetryPending = false;
+            _navigationRetryTimer.Stop();
+            return;
+        }
+
+        if (e.WebErrorStatus == Microsoft.Web.WebView2.Core.CoreWebView2WebErrorStatus.OperationCanceled && _isRetryPending)
+        {
+            return;
+        }
+
+        ScheduleNavigationRetry(_activeNavigationUrl ?? _lastRequestedUrl, $"Navigation failed: {e.WebErrorStatus}");
+    }
+
+    private void HandleNavigationWatchdogTimeout()
+    {
+        _navigationWatchdogTimer.Stop();
+
+        if (!_isNavigationInProgress)
+        {
+            return;
+        }
+
+        _isNavigationInProgress = false;
+
+        try
+        {
+            WebView.CoreWebView2?.Stop();
+        }
+        catch
+        {
+            // ignored
+        }
+
+        ScheduleNavigationRetry(_activeNavigationUrl ?? _lastRequestedUrl, "Navigation timed out.");
+    }
+
+    private void ScheduleNavigationRetry(string? url, string reason)
+    {
+        if (_isClosed || string.IsNullOrWhiteSpace(url))
+        {
+            return;
+        }
+
+        if (_navigationRetryCount >= MaxNavigationRetries)
+        {
+            LoggingService.LogMessage($"GifTalk overlay navigation retry limit reached: {url}");
+            return;
+        }
+
+        _lastRequestedUrl = url;
+
+        if (_navigationRetryTimer.IsEnabled)
+        {
+            return;
+        }
+
+        _isRetryPending = true;
+        LoggingService.LogMessage($"GifTalk overlay navigation retry scheduled ({_navigationRetryCount + 1}/{MaxNavigationRetries}). Reason: {reason}");
+        _navigationRetryTimer.Start();
+    }
+
+    private void RetryPendingNavigation()
+    {
+        _navigationRetryTimer.Stop();
+
+        if (_isClosed || string.IsNullOrWhiteSpace(_lastRequestedUrl))
+        {
+            _isRetryPending = false;
+            return;
+        }
+
+        _navigationRetryCount++;
+        _isRetryPending = false;
+
+        if (WebView.CoreWebView2 is null)
+        {
+            _pendingUrl = _lastRequestedUrl;
+            _ = EnsureCoreWebView2Async();
+            return;
+        }
+
+        if (!TryNavigate(_lastRequestedUrl))
+        {
+            ScheduleNavigationRetry(_lastRequestedUrl, "Retry navigation failed.");
+        }
+    }
+
     private void UpdateWindowStyle()
     {
-        if (_settings.GifTalkEnabled && !IsEditMode)
+        if (_overlay.Enabled)
+        {
+            _topmostEnforceTimer.Start();
+            EnsureTopmost();
+        }
+        else
+        {
+            _topmostEnforceTimer.Stop();
+        }
+
+        if (_overlay.Enabled && !IsEditMode)
         {
             _hoverTimer.Start();
         }
     }
 
+    private void EnsureTopmost()
+    {
+        if (_isClosed || !_overlay.Enabled)
+        {
+            return;
+        }
+
+        var hwnd = new WindowInteropHelper(this).Handle;
+        if (hwnd == IntPtr.Zero)
+        {
+            return;
+        }
+
+        SetWindowPos(hwnd, HwndTopmost, 0, 0, 0, 0, SwpNoMove | SwpNoSize | SwpNoActivate);
+    }
+
     private void HoverTimer_Tick(object? sender, EventArgs e)
     {
-        if (IsEditMode || !_settings.GifTalkEnabled)
+        if (IsEditMode || !_overlay.Enabled)
         {
             _hoverTimer.Stop();
             return;
@@ -335,8 +536,8 @@ public partial class GifTalkOverlayWindow : Window
         }
 
         var mousePoint = new System.Windows.Point(point.X, point.Y);
-        var isInside = mousePoint.X >= _settings.GifTalkX && mousePoint.X <= _settings.GifTalkX + _settings.GifTalkWidth
-            && mousePoint.Y >= _settings.GifTalkY && mousePoint.Y <= _settings.GifTalkY + _settings.GifTalkHeight;
+        var isInside = mousePoint.X >= _overlay.X && mousePoint.X <= _overlay.X + _overlay.Width
+            && mousePoint.Y >= _overlay.Y && mousePoint.Y <= _overlay.Y + _overlay.Height;
 
         if (isInside)
         {
@@ -352,15 +553,15 @@ public partial class GifTalkOverlayWindow : Window
 
     private double ComputeWebViewOpacity(System.Windows.Point mousePoint)
     {
-        var halfHeight = _settings.GifTalkHeight / 2.0;
+        var halfHeight = _overlay.Height / 2.0;
         if (halfHeight <= 0)
         {
             return FullHoverOpacity;
         }
 
         var distanceFromNearestEdge = Math.Min(
-            Math.Min(mousePoint.X - _settings.GifTalkX, _settings.GifTalkX + _settings.GifTalkWidth - mousePoint.X),
-            Math.Min(mousePoint.Y - _settings.GifTalkY, _settings.GifTalkY + _settings.GifTalkHeight - mousePoint.Y));
+            Math.Min(mousePoint.X - _overlay.X, _overlay.X + _overlay.Width - mousePoint.X),
+            Math.Min(mousePoint.Y - _overlay.Y, _overlay.Y + _overlay.Height - mousePoint.Y));
         var fullTransparencyDepth = halfHeight * (1.0 - FullTransparencyDistanceRatio);
 
         if (distanceFromNearestEdge >= fullTransparencyDepth)
@@ -654,6 +855,8 @@ public partial class GifTalkOverlayWindow : Window
         public int Y;
     }
 
+    private const uint SwpNoSize = 0x0001;
+    private const uint SwpNoMove = 0x0002;
     private const uint SwpNoZOrder = 0x0004;
     private const uint SwpNoActivate = 0x0010;
 

@@ -10,6 +10,7 @@ public class AppSettings
     public const string AppName = "ExCord";
     private const int FallbackScreenWidth = 1920;
     private const int FallbackScreenHeight = 1080;
+    private const int MaxOverlayItems = 20;
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
         WriteIndented = true
@@ -24,6 +25,7 @@ public class AppSettings
     public bool MonitorEnabled { get; set; } = true;
     public double OutputVolume { get; set; } = 100;
     public bool AutoStart { get; set; } = false;
+    public AppLanguage Language { get; set; } = LocalizationService.CurrentLanguage;
     public string GifTalkUrl { get; set; } = string.Empty;
     public bool GifTalkEnabled { get; set; } = false;
     public int GifTalkGeometryCoordinateVersion { get; set; } = 1;
@@ -31,6 +33,7 @@ public class AppSettings
     public double GifTalkY { get; set; } = GetDefaultGifTalkY();
     public double GifTalkWidth { get; set; } = 300;
     public double GifTalkHeight { get; set; } = 300;
+    public List<OverlayItemSettings> OverlayItems { get; set; } = [];
 
     public static string SettingsPath => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
@@ -79,6 +82,14 @@ public class AppSettings
         {
             HotkeyModifiers = ModifierKeys.Control | ModifierKeys.Alt;
         }
+
+        if (!Enum.IsDefined(Language))
+        {
+            Language = LocalizationService.CurrentLanguage;
+        }
+
+        ValidateAndNormalizeOverlayItems();
+        SyncLegacyGifTalkFromPrimaryOverlay();
     }
 
     public static double GetDefaultGifTalkY()
@@ -122,6 +133,7 @@ public class AppSettings
         if (!DisplayCoordinateHelper.IsRectangleOnAnyScreen(overlayLeft, overlayTop, overlayWidth, overlayHeight))
         {
             ResetGifTalkToDefault();
+            SyncPrimaryOverlayFromLegacyGifTalk();
         }
     }
 
@@ -147,6 +159,7 @@ public class AppSettings
             }
 
             settings.MigrateGifTalkGeometryToPixels();
+            settings.EnsureOverlayItemsInitializedFromLegacy();
             settings.ValidateAndNormalize();
             settings.EnsureGifTalkPositionIsOnScreen();
             return settings;
@@ -162,6 +175,10 @@ public class AppSettings
     {
         try
         {
+            EnsureOverlayItemsInitializedFromLegacy();
+            ValidateAndNormalizeOverlayItems();
+            SyncPrimaryOverlayFromLegacyGifTalk();
+
             var directory = Path.GetDirectoryName(SettingsPath);
             if (!string.IsNullOrEmpty(directory))
             {
@@ -177,5 +194,82 @@ public class AppSettings
         {
             LoggingService.LogException(ex, "AppSettings.Save");
         }
+    }
+
+    private void EnsureOverlayItemsInitializedFromLegacy()
+    {
+        OverlayItems ??= [];
+        if (OverlayItems.Count > 0)
+        {
+            return;
+        }
+
+        OverlayItems.Add(new OverlayItemSettings
+        {
+            Name = "Overlay 1",
+            Url = GifTalkUrl,
+            Enabled = GifTalkEnabled,
+            X = GifTalkX,
+            Y = GifTalkY,
+            Width = GifTalkWidth,
+            Height = GifTalkHeight
+        });
+    }
+
+    private void ValidateAndNormalizeOverlayItems()
+    {
+        OverlayItems ??= [];
+
+        if (OverlayItems.Count == 0)
+        {
+            EnsureOverlayItemsInitializedFromLegacy();
+        }
+
+        if (OverlayItems.Count > MaxOverlayItems)
+        {
+            OverlayItems = OverlayItems.Take(MaxOverlayItems).ToList();
+        }
+
+        var duplicateGuard = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        for (var i = 0; i < OverlayItems.Count; i++)
+        {
+            var overlay = OverlayItems[i] ?? new OverlayItemSettings();
+            overlay.ValidateAndNormalize(i);
+
+            while (!duplicateGuard.Add(overlay.Id))
+            {
+                overlay.Id = Guid.NewGuid().ToString("N");
+            }
+
+            OverlayItems[i] = overlay;
+        }
+    }
+
+    private void SyncLegacyGifTalkFromPrimaryOverlay()
+    {
+        if (OverlayItems.Count == 0)
+        {
+            return;
+        }
+
+        var primary = OverlayItems[0];
+        GifTalkUrl = primary.Url;
+        GifTalkEnabled = primary.Enabled;
+        GifTalkX = primary.X;
+        GifTalkY = primary.Y;
+        GifTalkWidth = primary.Width;
+        GifTalkHeight = primary.Height;
+    }
+
+    private void SyncPrimaryOverlayFromLegacyGifTalk()
+    {
+        EnsureOverlayItemsInitializedFromLegacy();
+        var primary = OverlayItems[0];
+        primary.Url = GifTalkUrl;
+        primary.Enabled = GifTalkEnabled;
+        primary.X = GifTalkX;
+        primary.Y = GifTalkY;
+        primary.Width = GifTalkWidth;
+        primary.Height = GifTalkHeight;
     }
 }
