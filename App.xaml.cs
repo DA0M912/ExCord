@@ -39,9 +39,10 @@ public partial class App : Application
         try
         {
             _settings = AppSettings.Load();
+            LocalizationService.SetLanguage(_settings.Language);
             _lastAppliedAutoStart = _settings.AutoStart;
             _autoStartService.ReconcilePathIfNeeded(_settings.AutoStart);
-            _settings.EnsureGifTalkPositionIsOnScreen();
+            _settings.EnsureWebViewPositionIsOnScreen();
             _ttsService = new TtsService();
             _ttsService.SetPreferredVoice(_settings.TtsVoiceId, _settings.TtsVoiceIsOneCore);
             _audioOutputService = new AudioOutputService();
@@ -53,7 +54,7 @@ public partial class App : Application
 
             SetupTrayIcon();
             RegisterHotkeySafely();
-            ApplyGifTalkState(_settings);
+            ApplyWebViewState(_settings);
         }
         catch (Exception ex)
         {
@@ -255,24 +256,24 @@ public partial class App : Application
         var settingsItem = new ToolStripMenuItem("Settings");
         settingsItem.Click += (_, _) => OpenSettingsWindow();
 
-        var gifTalkToggleItem = new ToolStripMenuItem($"Overlay: {(_settings.GifTalkEnabled ? "ON" : "OFF")}");
-        gifTalkToggleItem.Click += (_, _) =>
+        var WebViewToggleItem = new ToolStripMenuItem($"Overlay: {(_settings.WebViewEnabled ? "ON" : "OFF")}");
+        WebViewToggleItem.Click += (_, _) =>
         {
-            _settings.GifTalkEnabled = !_settings.GifTalkEnabled;
-            gifTalkToggleItem.Text = $"Overlay: {(_settings.GifTalkEnabled ? "ON" : "OFF")}";
-            gifTalkToggleItem.Checked = _settings.GifTalkEnabled;
+            _settings.WebViewEnabled = !_settings.WebViewEnabled;
+            WebViewToggleItem.Text = $"Overlay: {(_settings.WebViewEnabled ? "ON" : "OFF")}";
+            WebViewToggleItem.Checked = _settings.WebViewEnabled;
             _settings.Save();
-            _settingsWindow?.SyncGifTalkEnabledState(_settings.GifTalkEnabled);
-            ApplyGifTalkState(_settings);
+            _settingsWindow?.SyncWebViewEnabledState(_settings.WebViewEnabled);
+            ApplyWebViewState(_settings);
         };
-        gifTalkToggleItem.CheckOnClick = true;
-        gifTalkToggleItem.Checked = _settings.GifTalkEnabled;
+        WebViewToggleItem.CheckOnClick = true;
+        WebViewToggleItem.Checked = _settings.WebViewEnabled;
 
         var exitItem = new ToolStripMenuItem("Exit");
         exitItem.Click += async (_, _) => await ShutdownApplicationAsync();
 
         menu.Items.Add(settingsItem);
-        menu.Items.Add(gifTalkToggleItem);
+        menu.Items.Add(WebViewToggleItem);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(exitItem);
 
@@ -314,6 +315,7 @@ public partial class App : Application
                 var autoStartChanged = _lastAppliedAutoStart != updatedSettings.AutoStart;
                 _settings = updatedSettings;
                 _ttsService?.SetPreferredVoice(updatedSettings.TtsVoiceId, updatedSettings.TtsVoiceIsOneCore);
+                _inputWindow?.ApplyLocalizedTexts();
                 RegisterHotkeySafely();
                 if (autoStartChanged)
                 {
@@ -321,14 +323,14 @@ public partial class App : Application
                     _lastAppliedAutoStart = updatedSettings.AutoStart;
                 }
 
-                ApplyGifTalkState(updatedSettings);
-                _settingsWindow?.SetGifTalkOverlayWindow(_overlayManager?.GetPrimaryWindow());
+                ApplyWebViewState(updatedSettings);
+                _settingsWindow?.SetWebViewOverlayWindow(_overlayManager?.GetPrimaryWindow());
             };
-            _settingsWindow.GifTalkGeometryChanged += (_, updatedSettings) =>
+            _settingsWindow.WebViewGeometryChanged += (_, updatedSettings) =>
             {
                 _settings = updatedSettings;
-                ApplyGifTalkState(updatedSettings);
-                _settingsWindow?.SetGifTalkOverlayWindow(_overlayManager?.GetPrimaryWindow());
+                ApplyWebViewState(updatedSettings);
+                _settingsWindow?.SetWebViewOverlayWindow(_overlayManager?.GetPrimaryWindow());
             };
         }
 
@@ -336,10 +338,10 @@ public partial class App : Application
         _settingsWindow.Activate();
     }
 
-    private void ApplyGifTalkState(AppSettings settings)
+    private void ApplyWebViewState(AppSettings settings)
     {
         _overlayManager?.Apply(settings);
-        _settingsWindow?.SetGifTalkOverlayWindow(_overlayManager?.GetPrimaryWindow());
+        _settingsWindow?.SetWebViewOverlayWindow(_overlayManager?.GetPrimaryWindow());
     }
 
     private void ShowInputOverlay()
@@ -396,6 +398,7 @@ public partial class App : Application
             };
         }
 
+        _inputWindow.ApplyLocalizedTexts();
         _inputWindow.ShowOverlay();
     }
 
@@ -438,4 +441,5 @@ public partial class App : Application
         }
     }
 }
+
 

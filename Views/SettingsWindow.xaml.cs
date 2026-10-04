@@ -12,34 +12,34 @@ namespace ExCord.Views;
 
 public partial class SettingsWindow : Window
 {
-    private const double MinimumGifTalkSize = 80d;
-    private const double MaximumGifTalkSize = 10000d;
-    private const double MaximumGifTalkCoordinate = 100000d;
+    private const double MinimumWebViewSize = 80d;
+    private const double MaximumWebViewSize = 10000d;
+    private const double MaximumWebViewCoordinate = 100000d;
     private readonly AppSettings _settings;
-    private GifTalkOverlayWindow? _gifTalkOverlayWindow;
-    private readonly DispatcherTimer _gifTalkGeometrySaveTimer;
+    private WebViewOverlayWindow? _WebViewOverlayWindow;
+    private readonly DispatcherTimer _WebViewGeometrySaveTimer;
     private readonly DispatcherTimer _coreSettingsSaveTimer;
-    private bool _isSyncingGifTalkFields;
+    private bool _isSyncingWebViewFields;
     private bool _isInitializingCoreFields;
     private bool _isUpdatingLanguageSelection;
     private string? _latestReleaseUrl;
     private readonly CancellationTokenSource _updateCheckCancellation = new();
 
     public event EventHandler<AppSettings>? SettingsSaved;
-    public event EventHandler<AppSettings>? GifTalkGeometryChanged;
+    public event EventHandler<AppSettings>? WebViewGeometryChanged;
 
-    public SettingsWindow(AppSettings settings, GifTalkOverlayWindow? gifTalkOverlayWindow = null)
+    public SettingsWindow(AppSettings settings, WebViewOverlayWindow? WebViewOverlayWindow = null)
     {
-        _isSyncingGifTalkFields = true;
+        _isSyncingWebViewFields = true;
         _isInitializingCoreFields = true;
         InitializeComponent();
         _settings = settings;
         ApplyLocalizedTexts();
-        _gifTalkGeometrySaveTimer = new DispatcherTimer
+        _WebViewGeometrySaveTimer = new DispatcherTimer
         {
             Interval = TimeSpan.FromMilliseconds(300)
         };
-        _gifTalkGeometrySaveTimer.Tick += (_, _) => SaveGifTalkGeometryChanges();
+        _WebViewGeometrySaveTimer.Tick += (_, _) => SaveWebViewGeometryChanges();
         _coreSettingsSaveTimer = new DispatcherTimer
         {
             Interval = TimeSpan.FromMilliseconds(300)
@@ -49,19 +49,19 @@ public partial class SettingsWindow : Window
             _coreSettingsSaveTimer.Stop();
             SaveSettings();
         };
-        SetGifTalkOverlayWindow(gifTalkOverlayWindow);
+        SetWebViewOverlayWindow(WebViewOverlayWindow);
         Closing += (_, _) =>
         {
             _updateCheckCancellation.Cancel();
-            _gifTalkGeometrySaveTimer.Stop();
+            _WebViewGeometrySaveTimer.Stop();
             _coreSettingsSaveTimer.Stop();
-            if (_gifTalkOverlayWindow is not null && _gifTalkOverlayWindow.IsEditMode)
+            if (_WebViewOverlayWindow is not null && _WebViewOverlayWindow.IsEditMode)
             {
-                _gifTalkOverlayWindow.ExitEditMode(saveChanges: true);
+                _WebViewOverlayWindow.ExitEditMode(saveChanges: true);
             }
 
             SaveSettings();
-            SetGifTalkOverlayWindow(null);
+            SetWebViewOverlayWindow(null);
         };
 
         KeyComboBox.ItemsSource = Enum.GetValues(typeof(Key)).Cast<Key>().Where(k => k != Key.None && k != Key.System && k != Key.LWin && k != Key.RWin).ToList();
@@ -234,14 +234,14 @@ public partial class SettingsWindow : Window
         VoiceComboBox.PreviewMouseLeftButtonDown += VoiceComboBox_PreviewMouseLeftButtonDown;
         DeviceComboBox.PreviewMouseLeftButtonDown += DeviceComboBox_PreviewMouseLeftButtonDown;
 
-        GifTalkUrlTextBox.Text = _settings.GifTalkUrl;
-        GifTalkXTextBox.Text = _settings.GifTalkX.ToString(CultureInfo.InvariantCulture);
-        GifTalkYTextBox.Text = _settings.GifTalkY.ToString(CultureInfo.InvariantCulture);
-        GifTalkWidthTextBox.Text = _settings.GifTalkWidth.ToString(CultureInfo.InvariantCulture);
-        GifTalkHeightTextBox.Text = _settings.GifTalkHeight.ToString(CultureInfo.InvariantCulture);
-        GifTalkToggleButton.IsChecked = _settings.GifTalkEnabled;
+        WebViewUrlTextBox.Text = _settings.WebViewUrl;
+        WebViewXTextBox.Text = _settings.WebViewX.ToString(CultureInfo.InvariantCulture);
+        WebViewYTextBox.Text = _settings.WebViewY.ToString(CultureInfo.InvariantCulture);
+        WebViewWidthTextBox.Text = _settings.WebViewWidth.ToString(CultureInfo.InvariantCulture);
+        WebViewHeightTextBox.Text = _settings.WebViewHeight.ToString(CultureInfo.InvariantCulture);
+        WebViewToggleButton.IsChecked = _settings.WebViewEnabled;
 
-        _isSyncingGifTalkFields = false;
+        _isSyncingWebViewFields = false;
 
         var version = Assembly.GetExecutingAssembly().GetName().Version;
         VersionTextBlock.Text = $"v{version?.Major}.{version?.Minor}.{version?.Build}";
@@ -304,75 +304,75 @@ public partial class SettingsWindow : Window
         e.Handled = true;
     }
 
-    public void SetGifTalkOverlayWindow(GifTalkOverlayWindow? gifTalkOverlayWindow)
+    public void SetWebViewOverlayWindow(WebViewOverlayWindow? WebViewOverlayWindow)
     {
-        if (ReferenceEquals(_gifTalkOverlayWindow, gifTalkOverlayWindow))
+        if (ReferenceEquals(_WebViewOverlayWindow, WebViewOverlayWindow))
         {
             return;
         }
 
-        if (_gifTalkOverlayWindow is not null)
+        if (_WebViewOverlayWindow is not null)
         {
-            _gifTalkOverlayWindow.EditModeEnded -= GifTalkOverlayWindow_EditModeEnded;
-            _gifTalkOverlayWindow.GeometryChanged -= GifTalkOverlayWindow_GeometryChanged;
+            _WebViewOverlayWindow.EditModeEnded -= WebViewOverlayWindow_EditModeEnded;
+            _WebViewOverlayWindow.GeometryChanged -= WebViewOverlayWindow_GeometryChanged;
         }
 
-        _gifTalkOverlayWindow = gifTalkOverlayWindow;
+        _WebViewOverlayWindow = WebViewOverlayWindow;
 
-        if (_gifTalkOverlayWindow is not null)
+        if (_WebViewOverlayWindow is not null)
         {
-            _gifTalkOverlayWindow.EditModeEnded += GifTalkOverlayWindow_EditModeEnded;
-            _gifTalkOverlayWindow.GeometryChanged += GifTalkOverlayWindow_GeometryChanged;
+            _WebViewOverlayWindow.EditModeEnded += WebViewOverlayWindow_EditModeEnded;
+            _WebViewOverlayWindow.GeometryChanged += WebViewOverlayWindow_GeometryChanged;
         }
     }
 
-    public void SyncGifTalkEnabledState(bool isEnabled)
+    public void SyncWebViewEnabledState(bool isEnabled)
     {
-        if (GifTalkToggleButton.IsChecked == isEnabled)
+        if (WebViewToggleButton.IsChecked == isEnabled)
         {
             return;
         }
 
-        GifTalkToggleButton.Checked -= GifTalkToggleButton_Checked;
-        GifTalkToggleButton.Unchecked -= GifTalkToggleButton_Unchecked;
+        WebViewToggleButton.Checked -= WebViewToggleButton_Checked;
+        WebViewToggleButton.Unchecked -= WebViewToggleButton_Unchecked;
         try
         {
-            GifTalkToggleButton.IsChecked = isEnabled;
+            WebViewToggleButton.IsChecked = isEnabled;
         }
         finally
         {
-            GifTalkToggleButton.Checked += GifTalkToggleButton_Checked;
-            GifTalkToggleButton.Unchecked += GifTalkToggleButton_Unchecked;
+            WebViewToggleButton.Checked += WebViewToggleButton_Checked;
+            WebViewToggleButton.Unchecked += WebViewToggleButton_Unchecked;
         }
     }
 
-    private void GifTalkOverlayWindow_EditModeEnded(object? sender, bool saved)
+    private void WebViewOverlayWindow_EditModeEnded(object? sender, bool saved)
     {
-        if (GifTalkEditModeToggleButton.IsChecked == true)
+        if (WebViewEditModeToggleButton.IsChecked == true)
         {
-            GifTalkEditModeToggleButton.IsChecked = false;
+            WebViewEditModeToggleButton.IsChecked = false;
         }
 
         if (!saved)
         {
-            SyncGifTalkFieldsFromSettings();
+            SyncWebViewFieldsFromSettings();
         }
     }
 
-    private void GifTalkOverlayWindow_GeometryChanged(object? sender, EventArgs e)
+    private void WebViewOverlayWindow_GeometryChanged(object? sender, EventArgs e)
     {
-        if (_isSyncingGifTalkFields)
+        if (_isSyncingWebViewFields)
         {
             return;
         }
 
         var activeBox = FocusManager.GetFocusedElement(this) as System.Windows.Controls.TextBox;
-        if (activeBox == GifTalkXTextBox || activeBox == GifTalkYTextBox || activeBox == GifTalkWidthTextBox || activeBox == GifTalkHeightTextBox)
+        if (activeBox == WebViewXTextBox || activeBox == WebViewYTextBox || activeBox == WebViewWidthTextBox || activeBox == WebViewHeightTextBox)
         {
             return;
         }
 
-        SyncGifTalkFieldsFromOverlayGeometry();
+        SyncWebViewFieldsFromOverlayGeometry();
     }
 
     private void RestartCoreSettingsSaveTimer()
@@ -391,25 +391,20 @@ public partial class SettingsWindow : Window
         Close();
     }
 
-    private void ApplyGifTalkUrlButton_Click(object sender, RoutedEventArgs e)
+    private void ApplyWebViewUrlButton_Click(object sender, RoutedEventArgs e)
     {
-        var url = GifTalkUrlTextBox.Text.Trim();
+        var url = WebViewUrlTextBox.Text.Trim();
         if (string.IsNullOrWhiteSpace(url))
         {
             return;
         }
 
-        _settings.GifTalkUrl = url;
-        if (_gifTalkOverlayWindow is not null)
+        _settings.WebViewUrl = url;
+        if (_WebViewOverlayWindow is not null)
         {
-            _gifTalkOverlayWindow.NavigateToUrl(url);
+            _WebViewOverlayWindow.NavigateToUrl(url);
         }
 
-        SaveSettings();
-    }
-
-    private void GifTalkSaveButton_Click(object sender, RoutedEventArgs e)
-    {
         SaveSettings();
     }
 
@@ -433,130 +428,130 @@ public partial class SettingsWindow : Window
         SaveSettings();
     }
 
-    private void GifTalkToggleButton_Checked(object sender, RoutedEventArgs e)
+    private void WebViewToggleButton_Checked(object sender, RoutedEventArgs e)
     {
-        if (_isSyncingGifTalkFields)
+        if (_isSyncingWebViewFields)
         {
             return;
         }
 
-        var isEnabled = GifTalkToggleButton.IsChecked == true;
-        _settings.GifTalkEnabled = isEnabled;
-        _settings.GifTalkUrl = GifTalkUrlTextBox.Text.Trim();
+        var isEnabled = WebViewToggleButton.IsChecked == true;
+        _settings.WebViewEnabled = isEnabled;
+        _settings.WebViewUrl = WebViewUrlTextBox.Text.Trim();
 
-        if (!isEnabled && _gifTalkOverlayWindow is not null)
+        if (!isEnabled && _WebViewOverlayWindow is not null)
         {
-            _gifTalkOverlayWindow.IsEditMode = false;
-            GifTalkEditModeToggleButton.IsChecked = false;
+            _WebViewOverlayWindow.IsEditMode = false;
+            WebViewEditModeToggleButton.IsChecked = false;
         }
 
         _settings.Save();
         SettingsSaved?.Invoke(this, _settings);
     }
 
-    private void GifTalkToggleButton_Unchecked(object sender, RoutedEventArgs e)
+    private void WebViewToggleButton_Unchecked(object sender, RoutedEventArgs e)
     {
-        if (_isSyncingGifTalkFields)
+        if (_isSyncingWebViewFields)
         {
             return;
         }
 
-        var isEnabled = GifTalkToggleButton.IsChecked == true;
-        _settings.GifTalkEnabled = isEnabled;
-        _settings.GifTalkUrl = GifTalkUrlTextBox.Text.Trim();
+        var isEnabled = WebViewToggleButton.IsChecked == true;
+        _settings.WebViewEnabled = isEnabled;
+        _settings.WebViewUrl = WebViewUrlTextBox.Text.Trim();
 
-        if (!isEnabled && _gifTalkOverlayWindow is not null)
+        if (!isEnabled && _WebViewOverlayWindow is not null)
         {
-            _gifTalkOverlayWindow.IsEditMode = false;
-            GifTalkEditModeToggleButton.IsChecked = false;
+            _WebViewOverlayWindow.IsEditMode = false;
+            WebViewEditModeToggleButton.IsChecked = false;
         }
 
         _settings.Save();
         SettingsSaved?.Invoke(this, _settings);
     }
 
-    private void GifTalkEditModeToggleButton_Checked(object sender, RoutedEventArgs e)
+    private void WebViewEditModeToggleButton_Checked(object sender, RoutedEventArgs e)
     {
-        if (_isSyncingGifTalkFields)
+        if (_isSyncingWebViewFields)
         {
             return;
         }
 
-        if (_gifTalkOverlayWindow is null)
+        if (_WebViewOverlayWindow is null)
         {
-            GifTalkEditModeToggleButton.IsChecked = false;
+            WebViewEditModeToggleButton.IsChecked = false;
             return;
         }
 
-        if (_gifTalkOverlayWindow.IsEditMode)
+        if (_WebViewOverlayWindow.IsEditMode)
         {
-            GifTalkEditModeToggleButton.IsChecked = false;
+            WebViewEditModeToggleButton.IsChecked = false;
             return;
         }
 
-        SyncGifTalkFieldsFromSettings();
-        _gifTalkOverlayWindow.BeginEditMode();
-        _gifTalkOverlayWindow.ApplyGeometry(
-            _settings.GifTalkX,
-            _settings.GifTalkY,
-            _settings.GifTalkWidth,
-            _settings.GifTalkHeight);
+        SyncWebViewFieldsFromSettings();
+        _WebViewOverlayWindow.BeginEditMode();
+        _WebViewOverlayWindow.ApplyGeometry(
+            _settings.WebViewX,
+            _settings.WebViewY,
+            _settings.WebViewWidth,
+            _settings.WebViewHeight);
     }
 
-    private void GifTalkEditModeToggleButton_Unchecked(object sender, RoutedEventArgs e)
+    private void WebViewEditModeToggleButton_Unchecked(object sender, RoutedEventArgs e)
     {
-        if (_isSyncingGifTalkFields)
+        if (_isSyncingWebViewFields)
         {
             return;
         }
 
-        if (_gifTalkOverlayWindow is null || !_gifTalkOverlayWindow.IsEditMode)
+        if (_WebViewOverlayWindow is null || !_WebViewOverlayWindow.IsEditMode)
         {
             return;
         }
 
-        _gifTalkOverlayWindow.ExitEditMode(saveChanges: true);
-        SyncGifTalkFieldsFromSettings();
+        _WebViewOverlayWindow.ExitEditMode(saveChanges: true);
+        SyncWebViewFieldsFromSettings();
         _settings.Save();
         SettingsSaved?.Invoke(this, _settings);
     }
 
-    private void GifTalkPositionTextBox_TextChanged(object sender, TextChangedEventArgs e)
+    private void WebViewPositionTextBox_TextChanged(object sender, TextChangedEventArgs e)
     {
-        if (_isSyncingGifTalkFields || _gifTalkOverlayWindow is null)
+        if (_isSyncingWebViewFields || _WebViewOverlayWindow is null)
         {
             return;
         }
 
-        if (!TryParseGifTalkGeometry(out var x, out var y, out var width, out var height))
+        if (!TryParseWebViewGeometry(out var x, out var y, out var width, out var height))
         {
             return;
         }
 
-        _settings.GifTalkX = x;
-        _settings.GifTalkY = y;
-        _settings.GifTalkWidth = width;
-        _settings.GifTalkHeight = height;
-        _gifTalkOverlayWindow.ApplyGeometry(x, y, width, height);
-        _gifTalkGeometrySaveTimer.Stop();
-        _gifTalkGeometrySaveTimer.Start();
+        _settings.WebViewX = x;
+        _settings.WebViewY = y;
+        _settings.WebViewWidth = width;
+        _settings.WebViewHeight = height;
+        _WebViewOverlayWindow.ApplyGeometry(x, y, width, height);
+        _WebViewGeometrySaveTimer.Stop();
+        _WebViewGeometrySaveTimer.Start();
     }
 
-    private void SaveGifTalkGeometryChanges()
+    private void SaveWebViewGeometryChanges()
     {
-        _gifTalkGeometrySaveTimer.Stop();
+        _WebViewGeometrySaveTimer.Stop();
         _settings.Save();
-        GifTalkGeometryChanged?.Invoke(this, _settings);
+        WebViewGeometryChanged?.Invoke(this, _settings);
     }
 
-    private void ResetGifTalkPositionButton_Click(object sender, RoutedEventArgs e)
+    private void ResetWebViewPositionButton_Click(object sender, RoutedEventArgs e)
     {
-        _settings.ResetGifTalkToDefault();
-        SyncGifTalkFieldsFromSettings();
+        _settings.ResetWebViewToDefault();
+        SyncWebViewFieldsFromSettings();
 
-        if (_gifTalkOverlayWindow is not null)
+        if (_WebViewOverlayWindow is not null)
         {
-            _gifTalkOverlayWindow.ApplyGeometry(_settings.GifTalkX, _settings.GifTalkY, _settings.GifTalkWidth, _settings.GifTalkHeight);
+            _WebViewOverlayWindow.ApplyGeometry(_settings.WebViewX, _settings.WebViewY, _settings.WebViewWidth, _settings.WebViewHeight);
         }
 
         _settings.Save();
@@ -581,11 +576,10 @@ public partial class SettingsWindow : Window
 
     private List<LanguageOption> BuildLanguageOptions()
     {
-        var text = LocalizationService.Text;
         return
         [
-            new LanguageOption(AppLanguage.English, text.LanguageEnglish),
-            new LanguageOption(AppLanguage.Korean, text.LanguageKorean)
+            new LanguageOption(AppLanguage.English, "English"),
+            new LanguageOption(AppLanguage.Korean, "한국어")
         ];
     }
 
@@ -593,16 +587,17 @@ public partial class SettingsWindow : Window
     {
         var text = LocalizationService.Text;
         Title = text.SettingsWindowTitle;
-        GeneralTabItem.Header = text.TabGeneral;
+        GeneralTabItem.Header = "⚙";
+        GeneralTabItem.ToolTip = text.TabGeneral;
         TtsTabItem.Header = text.TabTts;
-        GifTalkTabItem.Header = text.TabGifTalk;
+        WebViewTabItem.Header = text.TabWebView;
 
         ApplicationSectionTextBlock.Text = text.SectionApplication;
         FeaturesSectionTextBlock.Text = text.SectionFeatures;
         LanguageSectionTextBlock.Text = text.SectionLanguage;
         AutoStartToggleButton.Content = text.StartWithWindows;
         TtsToggleButton.Content = text.TextToSpeech;
-        GifTalkToggleButton.Content = text.GifTalk;
+        WebViewToggleButton.Content = text.WebView;
 
         GlobalHotkeyTextBlock.Text = text.GlobalHotkey;
         TtsVoiceTextBlock.Text = text.TtsVoice;
@@ -610,13 +605,13 @@ public partial class SettingsWindow : Window
         OutputVolumeTextBlock.Text = text.OutputVolume;
         MonitorEnabledCheckBox.Content = text.MonitorSound;
 
-        GifUrlTextBlock.Text = text.GifUrl;
-        ApplyGifTalkUrlButton.Content = text.Apply;
-        GifTalkEditModeToggleButton.Content = text.EditMode;
-        GifTalkXTextBlock.Text = text.AxisX;
-        GifTalkYTextBlock.Text = text.AxisY;
-        GifTalkWidthTextBlock.Text = text.SizeWidth;
-        GifTalkHeightTextBlock.Text = text.SizeHeight;
+        WebUrlTextBlock.Text = text.WebUrl;
+        ApplyWebViewUrlButton.Content = text.Apply;
+        WebViewEditModeToggleButton.Content = text.EditMode;
+        WebViewXTextBlock.Text = text.AxisX;
+        WebViewYTextBlock.Text = text.AxisY;
+        WebViewWidthTextBlock.Text = text.SizeWidth;
+        WebViewHeightTextBlock.Text = text.SizeHeight;
 
         NewVersionTextBlock.Text = text.NewVersionAvailable;
         CloseButton.Content = text.Close;
@@ -666,57 +661,57 @@ public partial class SettingsWindow : Window
         _settings.OutputVolume = OutputVolumeSlider.Value;
         _settings.MonitorEnabled = MonitorEnabledCheckBox.IsChecked == true;
         _settings.AutoStart = AutoStartToggleButton.IsChecked == true;
-        _settings.GifTalkUrl = GifTalkUrlTextBox.Text.Trim();
-        _settings.GifTalkEnabled = GifTalkToggleButton.IsChecked == true;
+        _settings.WebViewUrl = WebViewUrlTextBox.Text.Trim();
+        _settings.WebViewEnabled = WebViewToggleButton.IsChecked == true;
 
-        if (TryParseGifTalkGeometry(out var x, out var y, out var width, out var height))
+        if (TryParseWebViewGeometry(out var x, out var y, out var width, out var height))
         {
-            _settings.GifTalkX = x;
-            _settings.GifTalkY = y;
-            _settings.GifTalkWidth = width;
-            _settings.GifTalkHeight = height;
+            _settings.WebViewX = x;
+            _settings.WebViewY = y;
+            _settings.WebViewWidth = width;
+            _settings.WebViewHeight = height;
         }
 
         _settings.Save();
         SettingsSaved?.Invoke(this, _settings);
     }
 
-    private void SyncGifTalkFieldsFromOverlayGeometry()
+    private void SyncWebViewFieldsFromOverlayGeometry()
     {
-        if (_gifTalkOverlayWindow is null)
+        if (_WebViewOverlayWindow is null)
         {
             return;
         }
 
-        _isSyncingGifTalkFields = true;
+        _isSyncingWebViewFields = true;
         try
         {
-            var bounds = _gifTalkOverlayWindow.GetGeometryInPixels();
-            SetTextPreservingCaret((System.Windows.Controls.TextBox)GifTalkXTextBox, bounds.X.ToString(CultureInfo.InvariantCulture));
-            SetTextPreservingCaret((System.Windows.Controls.TextBox)GifTalkYTextBox, bounds.Y.ToString(CultureInfo.InvariantCulture));
-            SetTextPreservingCaret((System.Windows.Controls.TextBox)GifTalkWidthTextBox, bounds.Width.ToString(CultureInfo.InvariantCulture));
-            SetTextPreservingCaret((System.Windows.Controls.TextBox)GifTalkHeightTextBox, bounds.Height.ToString(CultureInfo.InvariantCulture));
+            var bounds = _WebViewOverlayWindow.GetGeometryInPixels();
+            SetTextPreservingCaret((System.Windows.Controls.TextBox)WebViewXTextBox, bounds.X.ToString(CultureInfo.InvariantCulture));
+            SetTextPreservingCaret((System.Windows.Controls.TextBox)WebViewYTextBox, bounds.Y.ToString(CultureInfo.InvariantCulture));
+            SetTextPreservingCaret((System.Windows.Controls.TextBox)WebViewWidthTextBox, bounds.Width.ToString(CultureInfo.InvariantCulture));
+            SetTextPreservingCaret((System.Windows.Controls.TextBox)WebViewHeightTextBox, bounds.Height.ToString(CultureInfo.InvariantCulture));
         }
         finally
         {
-            _isSyncingGifTalkFields = false;
+            _isSyncingWebViewFields = false;
         }
     }
 
-    private void SyncGifTalkFieldsFromSettings()
+    private void SyncWebViewFieldsFromSettings()
     {
-        _isSyncingGifTalkFields = true;
+        _isSyncingWebViewFields = true;
         try
         {
-            SetTextPreservingCaret((System.Windows.Controls.TextBox)GifTalkUrlTextBox, _settings.GifTalkUrl);
-            SetTextPreservingCaret((System.Windows.Controls.TextBox)GifTalkXTextBox, _settings.GifTalkX.ToString(CultureInfo.InvariantCulture));
-            SetTextPreservingCaret((System.Windows.Controls.TextBox)GifTalkYTextBox, _settings.GifTalkY.ToString(CultureInfo.InvariantCulture));
-            SetTextPreservingCaret((System.Windows.Controls.TextBox)GifTalkWidthTextBox, _settings.GifTalkWidth.ToString(CultureInfo.InvariantCulture));
-            SetTextPreservingCaret((System.Windows.Controls.TextBox)GifTalkHeightTextBox, _settings.GifTalkHeight.ToString(CultureInfo.InvariantCulture));
+            SetTextPreservingCaret((System.Windows.Controls.TextBox)WebViewUrlTextBox, _settings.WebViewUrl);
+            SetTextPreservingCaret((System.Windows.Controls.TextBox)WebViewXTextBox, _settings.WebViewX.ToString(CultureInfo.InvariantCulture));
+            SetTextPreservingCaret((System.Windows.Controls.TextBox)WebViewYTextBox, _settings.WebViewY.ToString(CultureInfo.InvariantCulture));
+            SetTextPreservingCaret((System.Windows.Controls.TextBox)WebViewWidthTextBox, _settings.WebViewWidth.ToString(CultureInfo.InvariantCulture));
+            SetTextPreservingCaret((System.Windows.Controls.TextBox)WebViewHeightTextBox, _settings.WebViewHeight.ToString(CultureInfo.InvariantCulture));
         }
         finally
         {
-            _isSyncingGifTalkFields = false;
+            _isSyncingWebViewFields = false;
         }
     }
 
@@ -743,27 +738,27 @@ public partial class SettingsWindow : Window
         textBox.SelectionLength = 0;
     }
 
-    private bool TryParseGifTalkGeometry(out double x, out double y, out double width, out double height)
+    private bool TryParseWebViewGeometry(out double x, out double y, out double width, out double height)
     {
         x = 0;
         y = 0;
         width = 300;
         height = 300;
 
-        if (!double.TryParse(GifTalkXTextBox.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out x)
-            || !double.TryParse(GifTalkYTextBox.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out y)
-            || !double.TryParse(GifTalkWidthTextBox.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out width)
-            || !double.TryParse(GifTalkHeightTextBox.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out height)
+        if (!double.TryParse(WebViewXTextBox.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out x)
+            || !double.TryParse(WebViewYTextBox.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out y)
+            || !double.TryParse(WebViewWidthTextBox.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out width)
+            || !double.TryParse(WebViewHeightTextBox.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out height)
             || !double.IsFinite(x)
             || !double.IsFinite(y)
             || !double.IsFinite(width)
             || !double.IsFinite(height)
-            || Math.Abs(x) > MaximumGifTalkCoordinate
-            || Math.Abs(y) > MaximumGifTalkCoordinate
-            || width < MinimumGifTalkSize
-            || width > MaximumGifTalkSize
-            || height < MinimumGifTalkSize
-            || height > MaximumGifTalkSize)
+            || Math.Abs(x) > MaximumWebViewCoordinate
+            || Math.Abs(y) > MaximumWebViewCoordinate
+            || width < MinimumWebViewSize
+            || width > MaximumWebViewSize
+            || height < MinimumWebViewSize
+            || height > MaximumWebViewSize)
         {
             return false;
         }
@@ -865,5 +860,11 @@ public partial class SettingsWindow : Window
 
         public AppLanguage Language { get; }
         public string DisplayName { get; }
+
+        public override string ToString()
+        {
+            return DisplayName;
+        }
     }
 }
+

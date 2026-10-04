@@ -10,7 +10,7 @@ using System.Windows.Threading;
 
 namespace ExCord.Views;
 
-public partial class GifTalkOverlayWindow : Window
+public partial class WebViewOverlayWindow : Window
 {
     private const int GWL_EXSTYLE = -20;
     private const int WS_EX_TRANSPARENT = 0x00000020;
@@ -33,7 +33,7 @@ public partial class GifTalkOverlayWindow : Window
     private const int HoverOpacitySteps = 10;
     private const int HoverUpdateIntervalMilliseconds = 50;
     private const int TopmostEnforceIntervalMilliseconds = 500;
-    private const int NavigationWatchdogTimeoutMilliseconds = 15000;
+    private const int NavigationWatchdogTimeoutMilliseconds = 10000;
     private const int NavigationRetryDelayMilliseconds = 2000;
     private const int MaxNavigationRetries = 5;
 
@@ -75,6 +75,7 @@ public partial class GifTalkOverlayWindow : Window
 
     public bool IsEnabledOverlay => _overlay.Enabled;
     public string OverlayId => _overlay.Id;
+    public string? LastRequestedUrl => _lastRequestedUrl;
 
     public bool IsEditMode
     {
@@ -110,7 +111,7 @@ public partial class GifTalkOverlayWindow : Window
         }
     }
 
-    public GifTalkOverlayWindow(OverlayItemSettings overlay, Action? persistOverlayChanges = null)
+    public WebViewOverlayWindow(OverlayItemSettings overlay, Action? persistOverlayChanges = null)
     {
         InitializeComponent();
         _overlay = overlay;
@@ -357,7 +358,7 @@ public partial class GifTalkOverlayWindow : Window
         }
         catch (Exception ex)
         {
-            LoggingService.LogException(ex, "GifTalkOverlayWindow.TryNavigate");
+            LoggingService.LogException(ex, "WebViewOverlayWindow.TryNavigate");
             try
             {
                 WebView.CoreWebView2.Navigate("about:blank");
@@ -433,7 +434,7 @@ public partial class GifTalkOverlayWindow : Window
 
         if (_navigationRetryCount >= MaxNavigationRetries)
         {
-            LoggingService.LogMessage($"GifTalk overlay navigation retry limit reached: {url}");
+            LoggingService.LogMessage($"WebView overlay navigation retry limit reached: {url}");
             return;
         }
 
@@ -445,7 +446,7 @@ public partial class GifTalkOverlayWindow : Window
         }
 
         _isRetryPending = true;
-        LoggingService.LogMessage($"GifTalk overlay navigation retry scheduled ({_navigationRetryCount + 1}/{MaxNavigationRetries}). Reason: {reason}");
+        LoggingService.LogMessage($"WebView overlay navigation retry scheduled ({_navigationRetryCount + 1}/{MaxNavigationRetries}). Reason: {reason}");
         _navigationRetryTimer.Start();
     }
 
@@ -616,7 +617,7 @@ public partial class GifTalkOverlayWindow : Window
         }
         catch (Exception ex)
         {
-            LoggingService.LogException(ex, "GifTalkOverlayWindow.EnsureCoreWebView2Async");
+            LoggingService.LogException(ex, "WebViewOverlayWindow.EnsureCoreWebView2Async");
         }
     }
 
@@ -639,7 +640,7 @@ public partial class GifTalkOverlayWindow : Window
         }
         catch (Exception ex)
         {
-            LoggingService.LogException(ex, "GifTalkOverlayWindow.ApplyPendingWebViewOpacityAsync");
+            LoggingService.LogException(ex, "WebViewOverlayWindow.ApplyPendingWebViewOpacityAsync");
         }
         finally
         {
@@ -890,3 +891,4 @@ public partial class GifTalkOverlayWindow : Window
         }
     }
 }
+

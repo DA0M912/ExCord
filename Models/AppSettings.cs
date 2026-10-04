@@ -26,13 +26,13 @@ public class AppSettings
     public double OutputVolume { get; set; } = 100;
     public bool AutoStart { get; set; } = false;
     public AppLanguage Language { get; set; } = LocalizationService.CurrentLanguage;
-    public string GifTalkUrl { get; set; } = string.Empty;
-    public bool GifTalkEnabled { get; set; } = false;
-    public int GifTalkGeometryCoordinateVersion { get; set; } = 1;
-    public double GifTalkX { get; set; } = GetDefaultGifTalkX();
-    public double GifTalkY { get; set; } = GetDefaultGifTalkY();
-    public double GifTalkWidth { get; set; } = 300;
-    public double GifTalkHeight { get; set; } = 300;
+    public string WebViewUrl { get; set; } = string.Empty;
+    public bool WebViewEnabled { get; set; } = false;
+    public int WebViewGeometryCoordinateVersion { get; set; } = 1;
+    public double WebViewX { get; set; } = GetDefaultWebViewX();
+    public double WebViewY { get; set; } = GetDefaultWebViewY();
+    public double WebViewWidth { get; set; } = 300;
+    public double WebViewHeight { get; set; } = 300;
     public List<OverlayItemSettings> OverlayItems { get; set; } = [];
 
     public static string SettingsPath => Path.Combine(
@@ -40,7 +40,7 @@ public class AppSettings
         AppName,
         "settings.json");
 
-    public static double GetDefaultGifTalkX()
+    public static double GetDefaultWebViewX()
     {
         var width = Screen.PrimaryScreen?.Bounds.Width ?? FallbackScreenWidth;
         return (width - 300d) / 2d;
@@ -48,24 +48,24 @@ public class AppSettings
 
     public void ValidateAndNormalize()
     {
-        if (!double.IsFinite(GifTalkX) || Math.Abs(GifTalkX) > 100000d)
+        if (!double.IsFinite(WebViewX) || Math.Abs(WebViewX) > 100000d)
         {
-            GifTalkX = GetDefaultGifTalkX();
+            WebViewX = GetDefaultWebViewX();
         }
 
-        if (!double.IsFinite(GifTalkY) || Math.Abs(GifTalkY) > 100000d)
+        if (!double.IsFinite(WebViewY) || Math.Abs(WebViewY) > 100000d)
         {
-            GifTalkY = GetDefaultGifTalkY();
+            WebViewY = GetDefaultWebViewY();
         }
 
-        if (!double.IsFinite(GifTalkWidth) || GifTalkWidth < 80d || GifTalkWidth > 10000d)
+        if (!double.IsFinite(WebViewWidth) || WebViewWidth < 80d || WebViewWidth > 10000d)
         {
-            GifTalkWidth = 300d;
+            WebViewWidth = 300d;
         }
 
-        if (!double.IsFinite(GifTalkHeight) || GifTalkHeight < 80d || GifTalkHeight > 10000d)
+        if (!double.IsFinite(WebViewHeight) || WebViewHeight < 80d || WebViewHeight > 10000d)
         {
-            GifTalkHeight = 300d;
+            WebViewHeight = 300d;
         }
 
         OutputVolume = double.IsFinite(OutputVolume)
@@ -89,51 +89,51 @@ public class AppSettings
         }
 
         ValidateAndNormalizeOverlayItems();
-        SyncLegacyGifTalkFromPrimaryOverlay();
+        SyncLegacyWebViewFromPrimaryOverlay();
     }
 
-    public static double GetDefaultGifTalkY()
+    public static double GetDefaultWebViewY()
     {
         var height = Screen.PrimaryScreen?.Bounds.Height ?? FallbackScreenHeight;
         return height - 300d;
     }
 
-    public void ResetGifTalkToDefault()
+    public void ResetWebViewToDefault()
     {
-        GifTalkX = GetDefaultGifTalkX();
-        GifTalkY = GetDefaultGifTalkY();
-        GifTalkWidth = 300;
-        GifTalkHeight = 300;
+        WebViewX = GetDefaultWebViewX();
+        WebViewY = GetDefaultWebViewY();
+        WebViewWidth = 300;
+        WebViewHeight = 300;
     }
 
-    private void MigrateGifTalkGeometryToPixels()
+    private void MigrateWebViewGeometryToPixels()
     {
-        if (GifTalkGeometryCoordinateVersion >= 1)
+        if (WebViewGeometryCoordinateVersion >= 1)
         {
             return;
         }
 
         var dpi = DisplayCoordinateHelper.GetDpiForScreen(Screen.PrimaryScreen);
         var scale = dpi / 96d;
-        GifTalkX *= scale;
-        GifTalkY *= scale;
-        GifTalkWidth *= scale;
-        GifTalkHeight *= scale;
-        GifTalkGeometryCoordinateVersion = 1;
+        WebViewX *= scale;
+        WebViewY *= scale;
+        WebViewWidth *= scale;
+        WebViewHeight *= scale;
+        WebViewGeometryCoordinateVersion = 1;
         Save();
     }
 
-    public void EnsureGifTalkPositionIsOnScreen()
+    public void EnsureWebViewPositionIsOnScreen()
     {
-        var overlayLeft = GifTalkX;
-        var overlayTop = GifTalkY;
-        var overlayWidth = GifTalkWidth;
-        var overlayHeight = GifTalkHeight;
+        var overlayLeft = WebViewX;
+        var overlayTop = WebViewY;
+        var overlayWidth = WebViewWidth;
+        var overlayHeight = WebViewHeight;
 
         if (!DisplayCoordinateHelper.IsRectangleOnAnyScreen(overlayLeft, overlayTop, overlayWidth, overlayHeight))
         {
-            ResetGifTalkToDefault();
-            SyncPrimaryOverlayFromLegacyGifTalk();
+            ResetWebViewToDefault();
+            SyncPrimaryOverlayFromLegacyWebView();
         }
     }
 
@@ -158,10 +158,10 @@ public class AppSettings
                 settings.TtsVoiceId = string.Empty;
             }
 
-            settings.MigrateGifTalkGeometryToPixels();
+            settings.MigrateWebViewGeometryToPixels();
             settings.EnsureOverlayItemsInitializedFromLegacy();
             settings.ValidateAndNormalize();
-            settings.EnsureGifTalkPositionIsOnScreen();
+            settings.EnsureWebViewPositionIsOnScreen();
             return settings;
         }
         catch (Exception ex)
@@ -177,7 +177,7 @@ public class AppSettings
         {
             EnsureOverlayItemsInitializedFromLegacy();
             ValidateAndNormalizeOverlayItems();
-            SyncPrimaryOverlayFromLegacyGifTalk();
+            SyncPrimaryOverlayFromLegacyWebView();
 
             var directory = Path.GetDirectoryName(SettingsPath);
             if (!string.IsNullOrEmpty(directory))
@@ -207,12 +207,12 @@ public class AppSettings
         OverlayItems.Add(new OverlayItemSettings
         {
             Name = "Overlay 1",
-            Url = GifTalkUrl,
-            Enabled = GifTalkEnabled,
-            X = GifTalkX,
-            Y = GifTalkY,
-            Width = GifTalkWidth,
-            Height = GifTalkHeight
+            Url = WebViewUrl,
+            Enabled = WebViewEnabled,
+            X = WebViewX,
+            Y = WebViewY,
+            Width = WebViewWidth,
+            Height = WebViewHeight
         });
     }
 
@@ -245,7 +245,7 @@ public class AppSettings
         }
     }
 
-    private void SyncLegacyGifTalkFromPrimaryOverlay()
+    private void SyncLegacyWebViewFromPrimaryOverlay()
     {
         if (OverlayItems.Count == 0)
         {
@@ -253,23 +253,24 @@ public class AppSettings
         }
 
         var primary = OverlayItems[0];
-        GifTalkUrl = primary.Url;
-        GifTalkEnabled = primary.Enabled;
-        GifTalkX = primary.X;
-        GifTalkY = primary.Y;
-        GifTalkWidth = primary.Width;
-        GifTalkHeight = primary.Height;
+        WebViewUrl = primary.Url;
+        WebViewEnabled = primary.Enabled;
+        WebViewX = primary.X;
+        WebViewY = primary.Y;
+        WebViewWidth = primary.Width;
+        WebViewHeight = primary.Height;
     }
 
-    private void SyncPrimaryOverlayFromLegacyGifTalk()
+    private void SyncPrimaryOverlayFromLegacyWebView()
     {
         EnsureOverlayItemsInitializedFromLegacy();
         var primary = OverlayItems[0];
-        primary.Url = GifTalkUrl;
-        primary.Enabled = GifTalkEnabled;
-        primary.X = GifTalkX;
-        primary.Y = GifTalkY;
-        primary.Width = GifTalkWidth;
-        primary.Height = GifTalkHeight;
+        primary.Url = WebViewUrl;
+        primary.Enabled = WebViewEnabled;
+        primary.X = WebViewX;
+        primary.Y = WebViewY;
+        primary.Width = WebViewWidth;
+        primary.Height = WebViewHeight;
     }
 }
+

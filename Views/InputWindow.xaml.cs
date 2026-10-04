@@ -9,6 +9,7 @@ public partial class InputWindow : Window
 {
     private readonly List<string> _history = new();
     private int _historyIndex = -1;
+    private string _draftTextBeforeHistory = string.Empty;
 
     public event EventHandler<string>? TextSubmitted;
 
@@ -26,6 +27,7 @@ public partial class InputWindow : Window
         Deactivated += (_, _) => Hide();
 
         KeyDown += InputWindow_KeyDown;
+        InputTextBox.PreviewKeyDown += InputTextBox_PreviewKeyDown;
     }
 
     public void ShowOverlay()
@@ -50,6 +52,21 @@ public partial class InputWindow : Window
 
     private void InputWindow_KeyDown(object sender, KeyEventArgs e)
     {
+        HandleInputKey(e);
+    }
+
+    private void InputTextBox_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        HandleInputKey(e);
+    }
+
+    private void HandleInputKey(KeyEventArgs e)
+    {
+        if (e.Handled)
+        {
+            return;
+        }
+
         if (e.Key == Key.Enter && (Keyboard.Modifiers & ModifierKeys.Shift) == 0)
         {
             SubmitCurrentText();
@@ -66,14 +83,14 @@ public partial class InputWindow : Window
 
         if (e.Key == Key.Up)
         {
-            NavigateHistory(-1);
+            NavigateHistory(1);
             e.Handled = true;
             return;
         }
 
         if (e.Key == Key.Down)
         {
-            NavigateHistory(1);
+            NavigateHistory(-1);
             e.Handled = true;
         }
     }
@@ -95,6 +112,7 @@ public partial class InputWindow : Window
         }
 
         _historyIndex = -1;
+        _draftTextBeforeHistory = string.Empty;
         TextSubmitted?.Invoke(this, text);
         InputTextBox.Clear();
         Hide();
@@ -109,18 +127,32 @@ public partial class InputWindow : Window
 
         if (_historyIndex == -1)
         {
-            _historyIndex = 0;
+            if (direction > 0)
+            {
+                _draftTextBeforeHistory = InputTextBox.Text;
+                _historyIndex = 0;
+            }
+            else
+            {
+                return;
+            }
         }
-
-        _historyIndex += direction;
-        if (_historyIndex < 0)
+        else
         {
-            _historyIndex = 0;
-        }
+            _historyIndex += direction;
 
-        if (_historyIndex >= _history.Count)
-        {
-            _historyIndex = _history.Count - 1;
+            if (_historyIndex < 0)
+            {
+                _historyIndex = -1;
+                InputTextBox.Text = _draftTextBeforeHistory;
+                InputTextBox.CaretIndex = InputTextBox.Text.Length;
+                return;
+            }
+
+            if (_historyIndex >= _history.Count)
+            {
+                _historyIndex = _history.Count - 1;
+            }
         }
 
         InputTextBox.Text = _history[_historyIndex];

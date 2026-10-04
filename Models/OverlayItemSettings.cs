@@ -12,8 +12,8 @@ public sealed class OverlayItemSettings
     public string Name { get; set; } = "Overlay 1";
     public string Url { get; set; } = string.Empty;
     public bool Enabled { get; set; } = true;
-    public double X { get; set; } = AppSettings.GetDefaultGifTalkX();
-    public double Y { get; set; } = AppSettings.GetDefaultGifTalkY();
+    public double X { get; set; } = AppSettings.GetDefaultWebViewX();
+    public double Y { get; set; } = AppSettings.GetDefaultWebViewY();
     public double Width { get; set; } = DefaultWidth;
     public double Height { get; set; } = DefaultHeight;
 
@@ -32,12 +32,12 @@ public sealed class OverlayItemSettings
 
         if (!double.IsFinite(X) || Math.Abs(X) > MaximumCoordinate)
         {
-            X = AppSettings.GetDefaultGifTalkX();
+            X = AppSettings.GetDefaultWebViewX();
         }
 
         if (!double.IsFinite(Y) || Math.Abs(Y) > MaximumCoordinate)
         {
-            Y = AppSettings.GetDefaultGifTalkY();
+            Y = AppSettings.GetDefaultWebViewY();
         }
 
         if (!double.IsFinite(Width) || Width < MinimumSize || Width > MaximumSize)
@@ -51,3 +51,4 @@ public sealed class OverlayItemSettings
         }
     }
 }
+

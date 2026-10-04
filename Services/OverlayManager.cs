@@ -5,10 +5,10 @@ namespace ExCord.Services;
 
 public sealed class OverlayManager : IDisposable
 {
-    private readonly Dictionary<string, GifTalkOverlayWindow> _windows = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, WebViewOverlayWindow> _windows = new(StringComparer.OrdinalIgnoreCase);
     private AppSettings? _settings;
 
-    public GifTalkOverlayWindow? GetPrimaryWindow()
+    public WebViewOverlayWindow? GetPrimaryWindow()
     {
         if (_settings?.OverlayItems is null || _settings.OverlayItems.Count == 0)
         {
@@ -23,7 +23,7 @@ public sealed class OverlayManager : IDisposable
     {
         _settings = settings;
 
-        if (!settings.GifTalkEnabled)
+        if (!settings.WebViewEnabled)
         {
             CloseAll();
             return;
@@ -43,7 +43,8 @@ public sealed class OverlayManager : IDisposable
 
             window.UpdateFromSettings();
 
-            if (!string.IsNullOrWhiteSpace(overlay.Url))
+            if (!string.IsNullOrWhiteSpace(overlay.Url)
+                && !string.Equals(window.LastRequestedUrl, overlay.Url, StringComparison.OrdinalIgnoreCase))
             {
                 window.NavigateToUrl(overlay.Url);
             }
@@ -65,9 +66,9 @@ public sealed class OverlayManager : IDisposable
         }
     }
 
-    private GifTalkOverlayWindow CreateOverlayWindow(AppSettings settings, OverlayItemSettings overlay)
+    private WebViewOverlayWindow CreateOverlayWindow(AppSettings settings, OverlayItemSettings overlay)
     {
-        var window = new GifTalkOverlayWindow(overlay, settings.Save);
+        var window = new WebViewOverlayWindow(overlay, settings.Save);
         window.Closed += (_, _) =>
         {
             _windows.Remove(overlay.Id);
@@ -91,3 +92,4 @@ public sealed class OverlayManager : IDisposable
         _windows.Clear();
     }
 }
+
