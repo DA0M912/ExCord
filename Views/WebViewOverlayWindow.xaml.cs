@@ -33,9 +33,11 @@ public partial class WebViewOverlayWindow : Window
     private const int HoverOpacitySteps = 10;
     private const int HoverUpdateIntervalMilliseconds = 50;
     private const int TopmostEnforceIntervalMilliseconds = 500;
-    private const int NavigationWatchdogTimeoutMilliseconds = 10000;
+    private const int NavigationWatchdogTimeoutMilliseconds = 5000;
     private const int NavigationRetryDelayMilliseconds = 2000;
     private const int MaxNavigationRetries = 5;
+    private const string OpacityScriptTemplate = "(function (o) {\n  var r = document.documentElement;\n  if (!r) return;\n  r.style.transition = 'opacity 120ms ease-in-out';\n  r.style.opacity = String(o);\n  var id = '__excord_transparency_style';\n  var s = document.getElementById(id);\n  if (o < 0.999) {\n    if (!s) {\n      s = document.createElement('style');\n      s.id = id;\n      s.textContent = 'html:root:root, html:root:root body { background: transparent !important; background-image: none !important; }';\n      (document.head || r).appendChild(s);\n    }\n  } else if (s) {\n    s.remove();\n  }\n})(__OPACITY__);";
+    private static readonly System.Windows.Media.Brush InteractionHitTestBackground = CreateInteractionHitTestBackground();
 
     private readonly DispatcherTimer _hoverTimer;
     private readonly DispatcherTimer _topmostEnforceTimer;
@@ -71,6 +73,8 @@ public partial class WebViewOverlayWindow : Window
 
     public event EventHandler<bool>? EditModeEnded;
 
+    public event EventHandler<string>? EditModeRequested;
+
     public event EventHandler? GeometryChanged;
 
     public bool IsEnabledOverlay => _overlay.Enabled;
@@ -96,18 +100,13 @@ public partial class WebViewOverlayWindow : Window
                 _editModeStartSettingsY = _overlay.Y;
                 _editModeStartSettingsWidth = _overlay.Width;
                 _editModeStartSettingsHeight = _overlay.Height;
-                DisableClickThrough();
                 UpdateEditorVisualState();
-                _hoverTimer.Stop();
+                ApplyInteractionState();
                 return;
             }
 
             UpdateEditorVisualState();
-            if (_overlay.Enabled)
-            {
-                _startupHoverGraceTicks = 3;
-                _hoverTimer.Start();
-            }
+            ApplyInteractionState();
         }
     }
 
@@ -142,7 +141,14 @@ public partial class WebViewOverlayWindow : Window
         _navigationRetryTimer.Tick += (_, _) => RetryPendingNavigation();
         LocationChanged += (_, _) => NotifyGeometryChanged();
         SizeChanged += (_, _) => NotifyGeometryChanged();
-        Activated += (_, _) => EnsureTopmost();
+        Activated += (_, _) =>
+        {
+            EnsureTopmost();
+            if (_overlay.InteractionEnabled && !IsEditMode)
+            {
+                WebView.Focus();
+            }
+        };
         Deactivated += (_, _) => Dispatcher.BeginInvoke(EnsureTopmost, DispatcherPriority.Background);
 
         WebView.CoreWebView2InitializationCompleted += (_, _) =>
@@ -151,6 +157,7 @@ public partial class WebViewOverlayWindow : Window
             {
                 WebView.CoreWebView2.NavigationStarting += CoreWebView2_NavigationStarting;
                 WebView.CoreWebView2.NavigationCompleted += CoreWebView2_NavigationCompleted;
+                ApplyInteractionState();
                 ApplyWebViewOpacity();
             }
 
@@ -241,6 +248,18 @@ public partial class WebViewOverlayWindow : Window
         _editModeStartSettingsWidth = _overlay.Width;
         _editModeStartSettingsHeight = _overlay.Height;
         IsEditMode = true;
+        EditModeRequested?.Invoke(this, _overlay.Id);
+    }
+
+    public bool IsShiftRightClickTarget(int x, int y)
+    {
+        if (_isClosed || !IsVisible || !_overlay.Enabled || IsEditMode || !_overlay.ShiftRightClickEditEnabled)
+        {
+            return false;
+        }
+
+        var r = GetGeometryInPixels();
+        return x >= r.Left && x <= r.Right && y >= r.Top && y <= r.Bottom;
     }
 
     public void ExitEditMode(bool saveChanges)
@@ -289,6 +308,7 @@ public partial class WebViewOverlayWindow : Window
     public void UpdateFromSettings()
     {
         ApplyGeometry(_overlay.X, _overlay.Y, _overlay.Width, _overlay.Height);
+        ApplyInteractionState();
     }
 
     public void SaveCurrentGeometryToSettings()
@@ -518,6 +538,20 @@ public partial class WebViewOverlayWindow : Window
             return;
         }
 
+        if (_overlay.InteractionEnabled)
+        {
+            SetWebViewOpacity(FullHoverOpacity);
+            DisableClickThrough();
+            return;
+        }
+
+        if (!_overlay.TransparencyEnabled)
+        {
+            SetWebViewOpacity(FullHoverOpacity);
+            EnableClickThrough();
+            return;
+        }
+
         if (_startupHoverGraceTicks > 0)
         {
             _startupHoverGraceTicks--;
@@ -635,7 +669,8 @@ public partial class WebViewOverlayWindow : Window
                 }
 
                 var opacityText = opacity.ToString(CultureInfo.InvariantCulture);
-                await WebView.CoreWebView2.ExecuteScriptAsync($"document.documentElement.style.transition = 'opacity 120ms ease-in-out'; document.documentElement.style.opacity = '{opacityText}';");
+                var script = OpacityScriptTemplate.Replace("__OPACITY__", opacityText);
+                await WebView.CoreWebView2.ExecuteScriptAsync(script);
             }
         }
         catch (Exception ex)
@@ -762,6 +797,52 @@ public partial class WebViewOverlayWindow : Window
         SetWebViewOpacity(targetOpacity);
     }
 
+    private void ApplyInteractionState()
+    {
+        var isInteractionEnabled = _overlay.InteractionEnabled;
+
+        Background = isInteractionEnabled ? InteractionHitTestBackground : System.Windows.Media.Brushes.Transparent;
+        RootGrid.Background = isInteractionEnabled ? InteractionHitTestBackground : System.Windows.Media.Brushes.Transparent;
+
+        if (WebView.CoreWebView2 is not null)
+        {
+            WebView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = isInteractionEnabled;
+            WebView.CoreWebView2.Settings.AreBrowserAcceleratorKeysEnabled = isInteractionEnabled;
+        }
+
+        SetWebViewOpacity(FullHoverOpacity);
+
+        if (IsEditMode || !_overlay.Enabled)
+        {
+            _hoverTimer.Stop();
+            DisableClickThrough();
+            return;
+        }
+
+        if (isInteractionEnabled)
+        {
+            _hoverTimer.Stop();
+            DisableClickThrough();
+            if (IsActive)
+            {
+                WebView.Focus();
+            }
+
+            return;
+        }
+
+        if (!_overlay.TransparencyEnabled)
+        {
+            _hoverTimer.Stop();
+            EnableClickThrough();
+            return;
+        }
+
+        _startupHoverGraceTicks = 3;
+        _hoverTimer.Start();
+        DisableClickThrough();
+    }
+
     private void EnableClickThrough()
     {
         if (_isClickThroughEnabled)
@@ -782,6 +863,11 @@ public partial class WebViewOverlayWindow : Window
 
     private void DisableClickThrough()
     {
+        if (!_isClickThroughEnabled)
+        {
+            return;
+        }
+
         var hwnd = new WindowInteropHelper(this).Handle;
         if (hwnd == IntPtr.Zero)
         {
@@ -791,6 +877,13 @@ public partial class WebViewOverlayWindow : Window
         var style = GetWindowLong(hwnd, GWL_EXSTYLE);
         SetWindowLong(hwnd, GWL_EXSTYLE, style & ~WS_EX_TRANSPARENT);
         _isClickThroughEnabled = false;
+    }
+
+    private static System.Windows.Media.Brush CreateInteractionHitTestBackground()
+    {
+        var brush = new SolidColorBrush(System.Windows.Media.Color.FromArgb(1, 0, 0, 0));
+        brush.Freeze();
+        return brush;
     }
 
     private void ApplyWindowExStyle()
@@ -804,6 +897,7 @@ public partial class WebViewOverlayWindow : Window
         var exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
         exStyle |= WS_EX_LAYERED | WS_EX_TOOLWINDOW;
         SetWindowLong(hwnd, GWL_EXSTYLE, exStyle);
+        _isClickThroughEnabled = (exStyle & WS_EX_TRANSPARENT) == WS_EX_TRANSPARENT;
     }
 
     private static long GetWindowLong(IntPtr hwnd, int index)

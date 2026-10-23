@@ -177,7 +177,7 @@ public class AppSettings
         {
             EnsureOverlayItemsInitializedFromLegacy();
             ValidateAndNormalizeOverlayItems();
-            SyncPrimaryOverlayFromLegacyWebView();
+            SyncLegacyWebViewFromPrimaryOverlay();
 
             var directory = Path.GetDirectoryName(SettingsPath);
             if (!string.IsNullOrEmpty(directory))
@@ -208,7 +208,7 @@ public class AppSettings
         {
             Name = "Overlay 1",
             Url = WebViewUrl,
-            Enabled = WebViewEnabled,
+            Enabled = true,
             X = WebViewX,
             Y = WebViewY,
             Width = WebViewWidth,
@@ -254,7 +254,6 @@ public class AppSettings
 
         var primary = OverlayItems[0];
         WebViewUrl = primary.Url;
-        WebViewEnabled = primary.Enabled;
         WebViewX = primary.X;
         WebViewY = primary.Y;
         WebViewWidth = primary.Width;
@@ -266,11 +265,9 @@ public class AppSettings
         EnsureOverlayItemsInitializedFromLegacy();
         var primary = OverlayItems[0];
         primary.Url = WebViewUrl;
-        primary.Enabled = WebViewEnabled;
         primary.X = WebViewX;
         primary.Y = WebViewY;
         primary.Width = WebViewWidth;
         primary.Height = WebViewHeight;
     }
 }
-

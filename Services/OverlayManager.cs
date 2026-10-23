@@ -7,6 +7,7 @@ public sealed class OverlayManager : IDisposable
 {
     private readonly Dictionary<string, WebViewOverlayWindow> _windows = new(StringComparer.OrdinalIgnoreCase);
     private AppSettings? _settings;
+    private OverlayShiftRightClickHook? _hook;
 
     public WebViewOverlayWindow? GetPrimaryWindow()
     {
@@ -19,6 +20,11 @@ public sealed class OverlayManager : IDisposable
         return _windows.TryGetValue(primaryId, out var window) ? window : null;
     }
 
+    public IReadOnlyDictionary<string, WebViewOverlayWindow> GetWindows()
+    {
+        return _windows;
+    }
+
     public void Apply(AppSettings settings)
     {
         _settings = settings;
@@ -26,6 +32,7 @@ public sealed class OverlayManager : IDisposable
         if (!settings.WebViewEnabled)
         {
             CloseAll();
+            UpdateHook();
             return;
         }
 
@@ -64,6 +71,8 @@ public sealed class OverlayManager : IDisposable
                 staleWindow.Close();
             }
         }
+
+        UpdateHook();
     }
 
     private WebViewOverlayWindow CreateOverlayWindow(AppSettings settings, OverlayItemSettings overlay)
@@ -72,14 +81,36 @@ public sealed class OverlayManager : IDisposable
         window.Closed += (_, _) =>
         {
             _windows.Remove(overlay.Id);
+            UpdateHook();
         };
 
         return window;
     }
 
+    private WebViewOverlayWindow? FindShiftRightClickTarget(int x, int y) =>
+        _windows.Values.Reverse().FirstOrDefault(w => w.IsShiftRightClickTarget(x, y));
+
+    private void UpdateHook()
+    {
+        _hook ??= new OverlayShiftRightClickHook(
+            (x, y) => FindShiftRightClickTarget(x, y) is not null,
+            (x, y) => FindShiftRightClickTarget(x, y)?.BeginEditMode());
+
+        if (_windows.Count > 0)
+        {
+            _hook.Install();
+        }
+        else
+        {
+            _hook.Uninstall();
+        }
+    }
+
     public void Dispose()
     {
         CloseAll();
+        _hook?.Dispose();
+        _hook = null;
     }
 
     private void CloseAll()
@@ -90,6 +121,8 @@ public sealed class OverlayManager : IDisposable
         }
 
         _windows.Clear();
+        _hook?.Dispose();
+        _hook = null;
     }
 }
 

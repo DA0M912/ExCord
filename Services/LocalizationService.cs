@@ -36,7 +36,11 @@ public static class LocalizationService
         LanguageEnglish = "English",
         LanguageKorean = "한국어",
         EditConfirmToolTip = "Confirm",
-        EditCancelToolTip = "Cancel"
+        EditCancelToolTip = "Cancel",
+        OverlayTransparency = "Transparency",
+        OverlayInteractionMode = "Interaction Mode",
+        OverlayShiftRightClickEdit = "Enter edit mode with Shift+Right Click",
+        AddOverlay = "+ Add Viewer"
     };
 
     private static readonly LocalizedText KoreanText = new()
@@ -70,7 +74,11 @@ public static class LocalizationService
         LanguageEnglish = "영어",
         LanguageKorean = "한국어",
         EditConfirmToolTip = "확인",
-        EditCancelToolTip = "취소"
+        EditCancelToolTip = "취소",
+        OverlayTransparency = "투명화",
+        OverlayInteractionMode = "상호작용 모드",
+        OverlayShiftRightClickEdit = "Shift+우클릭 편집 진입",
+        AddOverlay = "+ 새 뷰어 추가"
     };
 
     static LocalizationService()
@@ -123,5 +131,9 @@ public sealed class LocalizedText
     public required string LanguageKorean { get; init; }
     public required string EditConfirmToolTip { get; init; }
     public required string EditCancelToolTip { get; init; }
+    public required string OverlayTransparency { get; init; }
+    public required string OverlayInteractionMode { get; init; }
+    public required string OverlayShiftRightClickEdit { get; init; }
+    public required string AddOverlay { get; init; }
 }
 

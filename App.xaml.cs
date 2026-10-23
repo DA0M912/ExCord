@@ -16,6 +16,7 @@ public partial class App : Application
     private OverlayManager? _overlayManager;
     private InputWindow? _inputWindow;
     private SettingsWindow? _settingsWindow;
+    private ToolStripMenuItem? _webViewToggleItem;
     private AppSettings _settings = new();
     private AutoStartService _autoStartService = new();
     private CancellationTokenSource? _textSubmissionCancellation;
@@ -256,24 +257,24 @@ public partial class App : Application
         var settingsItem = new ToolStripMenuItem("Settings");
         settingsItem.Click += (_, _) => OpenSettingsWindow();
 
-        var WebViewToggleItem = new ToolStripMenuItem($"Overlay: {(_settings.WebViewEnabled ? "ON" : "OFF")}");
-        WebViewToggleItem.Click += (_, _) =>
+        _webViewToggleItem = new ToolStripMenuItem($"Overlay: {(_settings.WebViewEnabled ? "ON" : "OFF")}");
+        _webViewToggleItem.Click += (_, _) =>
         {
             _settings.WebViewEnabled = !_settings.WebViewEnabled;
-            WebViewToggleItem.Text = $"Overlay: {(_settings.WebViewEnabled ? "ON" : "OFF")}";
-            WebViewToggleItem.Checked = _settings.WebViewEnabled;
             _settings.Save();
             _settingsWindow?.SyncWebViewEnabledState(_settings.WebViewEnabled);
             ApplyWebViewState(_settings);
         };
-        WebViewToggleItem.CheckOnClick = true;
-        WebViewToggleItem.Checked = _settings.WebViewEnabled;
 
         var exitItem = new ToolStripMenuItem("Exit");
         exitItem.Click += async (_, _) => await ShutdownApplicationAsync();
 
         menu.Items.Add(settingsItem);
-        menu.Items.Add(WebViewToggleItem);
+        if (_webViewToggleItem is not null)
+        {
+            menu.Items.Add(_webViewToggleItem);
+        }
+
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(exitItem);
 
@@ -286,6 +287,7 @@ public partial class App : Application
         };
 
         _notifyIcon.DoubleClick += (_, _) => OpenSettingsWindow();
+        RefreshTrayOverlayItem();
     }
 
     private static Icon LoadTrayIcon()
@@ -305,7 +307,7 @@ public partial class App : Application
     {
         if (_settingsWindow is null)
         {
-            _settingsWindow = new SettingsWindow(_settings, _overlayManager?.GetPrimaryWindow());
+            _settingsWindow = new SettingsWindow(_settings, _overlayManager?.GetWindows());
             _settingsWindow.Closed += (_, _) =>
             {
                 _settingsWindow = null;
@@ -324,13 +326,13 @@ public partial class App : Application
                 }
 
                 ApplyWebViewState(updatedSettings);
-                _settingsWindow?.SetWebViewOverlayWindow(_overlayManager?.GetPrimaryWindow());
+                _settingsWindow?.SetOverlayWindows(_overlayManager?.GetWindows());
             };
             _settingsWindow.WebViewGeometryChanged += (_, updatedSettings) =>
             {
                 _settings = updatedSettings;
                 ApplyWebViewState(updatedSettings);
-                _settingsWindow?.SetWebViewOverlayWindow(_overlayManager?.GetPrimaryWindow());
+                _settingsWindow?.SetOverlayWindows(_overlayManager?.GetWindows());
             };
         }
 
@@ -341,7 +343,19 @@ public partial class App : Application
     private void ApplyWebViewState(AppSettings settings)
     {
         _overlayManager?.Apply(settings);
-        _settingsWindow?.SetWebViewOverlayWindow(_overlayManager?.GetPrimaryWindow());
+        _settingsWindow?.SetOverlayWindows(_overlayManager?.GetWindows());
+        RefreshTrayOverlayItem();
+    }
+
+    private void RefreshTrayOverlayItem()
+    {
+        if (_webViewToggleItem is null)
+        {
+            return;
+        }
+
+        _webViewToggleItem.Text = $"Overlay: {(_settings.WebViewEnabled ? "ON" : "OFF")}";
+        _webViewToggleItem.Checked = _settings.WebViewEnabled;
     }
 
     private void ShowInputOverlay()

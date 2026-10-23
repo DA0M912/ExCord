@@ -1,45 +1,48 @@
 ﻿using ExCord.Models;
 using ExCord.Services;
+using System.Collections.ObjectModel;
 using System.Diagnostics;
-using System.Globalization;
 using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Threading;
 
 namespace ExCord.Views;
 
 public partial class SettingsWindow : Window
 {
-    private const double MinimumWebViewSize = 80d;
-    private const double MaximumWebViewSize = 10000d;
-    private const double MaximumWebViewCoordinate = 100000d;
     private readonly AppSettings _settings;
-    private WebViewOverlayWindow? _WebViewOverlayWindow;
-    private readonly DispatcherTimer _WebViewGeometrySaveTimer;
+    private readonly ObservableCollection<OverlayItemSettings> _overlayItems;
+    private readonly Dictionary<string, WebViewOverlayWindow> _overlayWindows = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, bool> _expanderStates = new(StringComparer.OrdinalIgnoreCase);
     private readonly DispatcherTimer _coreSettingsSaveTimer;
-    private bool _isSyncingWebViewFields;
-    private bool _isInitializingCoreFields;
-    private bool _isUpdatingLanguageSelection;
-    private string? _latestReleaseUrl;
     private readonly CancellationTokenSource _updateCheckCancellation = new();
+    private bool _isUpdatingLanguageSelection;
+    private bool _isInitializingCoreFields;
+    private bool _isRefreshingOverlayUi;
+    private bool _isOverlayContainersGenerating;
+    private OverlayItemSettings? _draggedOverlay;
+    private bool _overlayOrderChanged;
+    private Popup? _overlayDragPopup;
+    private string? _latestReleaseUrl;
 
     public event EventHandler<AppSettings>? SettingsSaved;
     public event EventHandler<AppSettings>? WebViewGeometryChanged;
 
-    public SettingsWindow(AppSettings settings, WebViewOverlayWindow? WebViewOverlayWindow = null)
+    public SettingsWindow(AppSettings settings, IReadOnlyDictionary<string, WebViewOverlayWindow>? overlayWindows = null)
     {
-        _isSyncingWebViewFields = true;
         _isInitializingCoreFields = true;
         InitializeComponent();
         _settings = settings;
+        _overlayItems = new ObservableCollection<OverlayItemSettings>(_settings.OverlayItems);
+        OverlayItemsControl.ItemsSource = _overlayItems;
+        OverlayItemsControl.ItemContainerGenerator.StatusChanged += OverlayItemsControl_ItemContainerGenerator_StatusChanged;
         ApplyLocalizedTexts();
-        _WebViewGeometrySaveTimer = new DispatcherTimer
-        {
-            Interval = TimeSpan.FromMilliseconds(300)
-        };
-        _WebViewGeometrySaveTimer.Tick += (_, _) => SaveWebViewGeometryChanges();
+
         _coreSettingsSaveTimer = new DispatcherTimer
         {
             Interval = TimeSpan.FromMilliseconds(300)
@@ -49,19 +52,16 @@ public partial class SettingsWindow : Window
             _coreSettingsSaveTimer.Stop();
             SaveSettings();
         };
-        SetWebViewOverlayWindow(WebViewOverlayWindow);
+
+        SetOverlayWindows(overlayWindows);
+
         Closing += (_, _) =>
         {
             _updateCheckCancellation.Cancel();
-            _WebViewGeometrySaveTimer.Stop();
             _coreSettingsSaveTimer.Stop();
-            if (_WebViewOverlayWindow is not null && _WebViewOverlayWindow.IsEditMode)
-            {
-                _WebViewOverlayWindow.ExitEditMode(saveChanges: true);
-            }
-
+            ExitAllEditModes();
             SaveSettings();
-            SetWebViewOverlayWindow(null);
+            SetOverlayWindows(null);
         };
 
         KeyComboBox.ItemsSource = Enum.GetValues(typeof(Key)).Cast<Key>().Where(k => k != Key.None && k != Key.System && k != Key.LWin && k != Key.RWin).ToList();
@@ -73,7 +73,6 @@ public partial class SettingsWindow : Window
         AltCheckBox.IsChecked = (_settings.HotkeyModifiers & ModifierKeys.Alt) == ModifierKeys.Alt;
         ShiftCheckBox.IsChecked = (_settings.HotkeyModifiers & ModifierKeys.Shift) == ModifierKeys.Shift;
 
-        // PERF: 설치된 언어팩/보이스가 매우 많은 환경에서 설정창 열기가 느리면 여기를 비동기로 전환할 것.
         var voices = LoadVoiceOptions();
         VoiceComboBox.ItemsSource = voices;
 
@@ -101,147 +100,33 @@ public partial class SettingsWindow : Window
         MonitorEnabledCheckBox.IsChecked = _settings.MonitorEnabled;
         AutoStartToggleButton.IsChecked = _settings.AutoStart;
         TtsToggleButton.IsChecked = _settings.TtsEnabled;
-        _isInitializingCoreFields = false;
+        WebViewToggleButton.IsChecked = _settings.WebViewEnabled;
+        OutputVolumeLabel.Text = $"{_settings.OutputVolume:0}%";
 
         OutputVolumeSlider.ValueChanged += (_, _) => OutputVolumeLabel.Text = $"{OutputVolumeSlider.Value:0}%";
-        VoiceComboBox.SelectionChanged += (_, _) =>
-        {
-            if (_isInitializingCoreFields)
-            {
-                return;
-            }
-
-            SaveSettings();
-        };
-        DeviceComboBox.SelectionChanged += (_, _) =>
-        {
-            if (_isInitializingCoreFields)
-            {
-                return;
-            }
-
-            SaveSettings();
-        };
-        MonitorEnabledCheckBox.Checked += (_, _) =>
-        {
-            if (_isInitializingCoreFields)
-            {
-                return;
-            }
-
-            SaveSettings();
-        };
-        MonitorEnabledCheckBox.Unchecked += (_, _) =>
-        {
-            if (_isInitializingCoreFields)
-            {
-                return;
-            }
-
-            SaveSettings();
-        };
-        AutoStartToggleButton.Checked += (_, _) =>
-        {
-            if (_isInitializingCoreFields)
-            {
-                return;
-            }
-
-            SaveSettings();
-        };
-        AutoStartToggleButton.Unchecked += (_, _) =>
-        {
-            if (_isInitializingCoreFields)
-            {
-                return;
-            }
-
-            SaveSettings();
-        };
-        OutputVolumeSlider.ValueChanged += (_, _) =>
-        {
-            if (_isInitializingCoreFields)
-            {
-                return;
-            }
-
-            RestartCoreSettingsSaveTimer();
-        };
-        CtrlCheckBox.Checked += (_, _) =>
-        {
-            if (_isInitializingCoreFields)
-            {
-                return;
-            }
-
-            RestartCoreSettingsSaveTimer();
-        };
-        CtrlCheckBox.Unchecked += (_, _) =>
-        {
-            if (_isInitializingCoreFields)
-            {
-                return;
-            }
-
-            RestartCoreSettingsSaveTimer();
-        };
-        AltCheckBox.Checked += (_, _) =>
-        {
-            if (_isInitializingCoreFields)
-            {
-                return;
-            }
-
-            RestartCoreSettingsSaveTimer();
-        };
-        AltCheckBox.Unchecked += (_, _) =>
-        {
-            if (_isInitializingCoreFields)
-            {
-                return;
-            }
-
-            RestartCoreSettingsSaveTimer();
-        };
-        ShiftCheckBox.Checked += (_, _) =>
-        {
-            if (_isInitializingCoreFields)
-            {
-                return;
-            }
-
-            RestartCoreSettingsSaveTimer();
-        };
-        ShiftCheckBox.Unchecked += (_, _) =>
-        {
-            if (_isInitializingCoreFields)
-            {
-                return;
-            }
-
-            RestartCoreSettingsSaveTimer();
-        };
-        KeyComboBox.SelectionChanged += (_, _) =>
-        {
-            if (_isInitializingCoreFields)
-            {
-                return;
-            }
-
-            RestartCoreSettingsSaveTimer();
-        };
-        OutputVolumeLabel.Text = $"{_settings.OutputVolume:0}%";
+        VoiceComboBox.SelectionChanged += (_, _) => SaveSettingsIfInitialized();
+        DeviceComboBox.SelectionChanged += (_, _) => SaveSettingsIfInitialized();
+        MonitorEnabledCheckBox.Checked += (_, _) => SaveSettingsIfInitialized();
+        MonitorEnabledCheckBox.Unchecked += (_, _) => SaveSettingsIfInitialized();
+        AutoStartToggleButton.Checked += (_, _) => SaveSettingsIfInitialized();
+        AutoStartToggleButton.Unchecked += (_, _) => SaveSettingsIfInitialized();
+        TtsToggleButton.Checked += TtsToggleButton_Checked;
+        TtsToggleButton.Unchecked += TtsToggleButton_Unchecked;
+        WebViewToggleButton.Checked += WebViewToggleButton_Checked;
+        WebViewToggleButton.Unchecked += WebViewToggleButton_Unchecked;
+        OutputVolumeSlider.ValueChanged += (_, _) => RestartCoreSettingsSaveTimer();
+        CtrlCheckBox.Checked += (_, _) => RestartCoreSettingsSaveTimer();
+        CtrlCheckBox.Unchecked += (_, _) => RestartCoreSettingsSaveTimer();
+        AltCheckBox.Checked += (_, _) => RestartCoreSettingsSaveTimer();
+        AltCheckBox.Unchecked += (_, _) => RestartCoreSettingsSaveTimer();
+        ShiftCheckBox.Checked += (_, _) => RestartCoreSettingsSaveTimer();
+        ShiftCheckBox.Unchecked += (_, _) => RestartCoreSettingsSaveTimer();
+        KeyComboBox.SelectionChanged += (_, _) => RestartCoreSettingsSaveTimer();
         VoiceComboBox.PreviewMouseLeftButtonDown += VoiceComboBox_PreviewMouseLeftButtonDown;
         DeviceComboBox.PreviewMouseLeftButtonDown += DeviceComboBox_PreviewMouseLeftButtonDown;
 
-        WebViewUrlTextBox.Text = _settings.WebViewUrl;
-        WebViewXTextBox.Text = _settings.WebViewX.ToString(CultureInfo.InvariantCulture);
-        WebViewYTextBox.Text = _settings.WebViewY.ToString(CultureInfo.InvariantCulture);
-        WebViewWidthTextBox.Text = _settings.WebViewWidth.ToString(CultureInfo.InvariantCulture);
-        WebViewHeightTextBox.Text = _settings.WebViewHeight.ToString(CultureInfo.InvariantCulture);
-        WebViewToggleButton.IsChecked = _settings.WebViewEnabled;
-
-        _isSyncingWebViewFields = false;
+        _isInitializingCoreFields = false;
+        Dispatcher.BeginInvoke(RefreshOverlayUi, DispatcherPriority.Loaded);
 
         var version = Assembly.GetExecutingAssembly().GetName().Version;
         VersionTextBlock.Text = $"v{version?.Major}.{version?.Minor}.{version?.Build}";
@@ -304,25 +189,28 @@ public partial class SettingsWindow : Window
         e.Handled = true;
     }
 
-    public void SetWebViewOverlayWindow(WebViewOverlayWindow? WebViewOverlayWindow)
+    public void SetOverlayWindows(IReadOnlyDictionary<string, WebViewOverlayWindow>? overlayWindows)
     {
-        if (ReferenceEquals(_WebViewOverlayWindow, WebViewOverlayWindow))
+        foreach (var window in _overlayWindows.Values)
+        {
+            window.EditModeEnded -= WebViewOverlayWindow_EditModeEnded;
+            window.EditModeRequested -= WebViewOverlayWindow_EditModeRequested;
+            window.GeometryChanged -= WebViewOverlayWindow_GeometryChanged;
+        }
+
+        _overlayWindows.Clear();
+
+        if (overlayWindows is null)
         {
             return;
         }
 
-        if (_WebViewOverlayWindow is not null)
+        foreach (var pair in overlayWindows)
         {
-            _WebViewOverlayWindow.EditModeEnded -= WebViewOverlayWindow_EditModeEnded;
-            _WebViewOverlayWindow.GeometryChanged -= WebViewOverlayWindow_GeometryChanged;
-        }
-
-        _WebViewOverlayWindow = WebViewOverlayWindow;
-
-        if (_WebViewOverlayWindow is not null)
-        {
-            _WebViewOverlayWindow.EditModeEnded += WebViewOverlayWindow_EditModeEnded;
-            _WebViewOverlayWindow.GeometryChanged += WebViewOverlayWindow_GeometryChanged;
+            _overlayWindows[pair.Key] = pair.Value;
+            pair.Value.EditModeEnded += WebViewOverlayWindow_EditModeEnded;
+            pair.Value.EditModeRequested += WebViewOverlayWindow_EditModeRequested;
+            pair.Value.GeometryChanged += WebViewOverlayWindow_GeometryChanged;
         }
     }
 
@@ -348,31 +236,44 @@ public partial class SettingsWindow : Window
 
     private void WebViewOverlayWindow_EditModeEnded(object? sender, bool saved)
     {
-        if (WebViewEditModeToggleButton.IsChecked == true)
+        if (sender is not WebViewOverlayWindow overlayWindow)
         {
-            WebViewEditModeToggleButton.IsChecked = false;
+            return;
         }
 
+        SetOverlayEditToggleState(overlayWindow.OverlayId, false);
         if (!saved)
         {
-            SyncWebViewFieldsFromSettings();
+            RefreshOverlayUi();
         }
+    }
+
+    private void WebViewOverlayWindow_EditModeRequested(object? sender, string overlayId)
+    {
+        ExpandOverlayExpander(overlayId);
+        SetOverlayEditToggleState(overlayId, true);
     }
 
     private void WebViewOverlayWindow_GeometryChanged(object? sender, EventArgs e)
     {
-        if (_isSyncingWebViewFields)
+        if (sender is not WebViewOverlayWindow overlayWindow)
         {
             return;
         }
 
-        var activeBox = FocusManager.GetFocusedElement(this) as System.Windows.Controls.TextBox;
-        if (activeBox == WebViewXTextBox || activeBox == WebViewYTextBox || activeBox == WebViewWidthTextBox || activeBox == WebViewHeightTextBox)
+        var overlay = _overlayItems.FirstOrDefault(item => string.Equals(item.Id, overlayWindow.OverlayId, StringComparison.OrdinalIgnoreCase));
+        if (overlay is null)
         {
             return;
         }
 
-        SyncWebViewFieldsFromOverlayGeometry();
+        var bounds = overlayWindow.GetGeometryInPixels();
+        overlay.X = bounds.X;
+        overlay.Y = bounds.Y;
+        overlay.Width = bounds.Width;
+        overlay.Height = bounds.Height;
+        WebViewGeometryChanged?.Invoke(this, _settings);
+        RefreshOverlayUi();
     }
 
     private void RestartCoreSettingsSaveTimer()
@@ -389,23 +290,6 @@ public partial class SettingsWindow : Window
     private void CloseButton_Click(object sender, RoutedEventArgs e)
     {
         Close();
-    }
-
-    private void ApplyWebViewUrlButton_Click(object sender, RoutedEventArgs e)
-    {
-        var url = WebViewUrlTextBox.Text.Trim();
-        if (string.IsNullOrWhiteSpace(url))
-        {
-            return;
-        }
-
-        _settings.WebViewUrl = url;
-        if (_WebViewOverlayWindow is not null)
-        {
-            _WebViewOverlayWindow.NavigateToUrl(url);
-        }
-
-        SaveSettings();
     }
 
     private void TtsToggleButton_Checked(object sender, RoutedEventArgs e)
@@ -430,132 +314,497 @@ public partial class SettingsWindow : Window
 
     private void WebViewToggleButton_Checked(object sender, RoutedEventArgs e)
     {
-        if (_isSyncingWebViewFields)
+        if (_isInitializingCoreFields)
         {
             return;
         }
 
-        var isEnabled = WebViewToggleButton.IsChecked == true;
-        _settings.WebViewEnabled = isEnabled;
-        _settings.WebViewUrl = WebViewUrlTextBox.Text.Trim();
-
-        if (!isEnabled && _WebViewOverlayWindow is not null)
-        {
-            _WebViewOverlayWindow.IsEditMode = false;
-            WebViewEditModeToggleButton.IsChecked = false;
-        }
-
-        _settings.Save();
-        SettingsSaved?.Invoke(this, _settings);
+        _settings.WebViewEnabled = WebViewToggleButton.IsChecked == true;
+        SaveSettings();
     }
 
     private void WebViewToggleButton_Unchecked(object sender, RoutedEventArgs e)
     {
-        if (_isSyncingWebViewFields)
+        if (_isInitializingCoreFields)
         {
             return;
         }
 
-        var isEnabled = WebViewToggleButton.IsChecked == true;
-        _settings.WebViewEnabled = isEnabled;
-        _settings.WebViewUrl = WebViewUrlTextBox.Text.Trim();
-
-        if (!isEnabled && _WebViewOverlayWindow is not null)
-        {
-            _WebViewOverlayWindow.IsEditMode = false;
-            WebViewEditModeToggleButton.IsChecked = false;
-        }
-
-        _settings.Save();
-        SettingsSaved?.Invoke(this, _settings);
+        _settings.WebViewEnabled = WebViewToggleButton.IsChecked == true;
+        ExitAllEditModes();
+        SaveSettings();
     }
 
-    private void WebViewEditModeToggleButton_Checked(object sender, RoutedEventArgs e)
+    private void OverlayNameTextBox_TextChanged(object sender, TextChangedEventArgs e)
     {
-        if (_isSyncingWebViewFields)
+        if (_isRefreshingOverlayUi || !TryGetOverlayFromElement(sender, out _))
         {
             return;
         }
 
-        if (_WebViewOverlayWindow is null)
-        {
-            WebViewEditModeToggleButton.IsChecked = false;
-            return;
-        }
-
-        if (_WebViewOverlayWindow.IsEditMode)
-        {
-            WebViewEditModeToggleButton.IsChecked = false;
-            return;
-        }
-
-        SyncWebViewFieldsFromSettings();
-        _WebViewOverlayWindow.BeginEditMode();
-        _WebViewOverlayWindow.ApplyGeometry(
-            _settings.WebViewX,
-            _settings.WebViewY,
-            _settings.WebViewWidth,
-            _settings.WebViewHeight);
+        SaveSettings();
     }
 
-    private void WebViewEditModeToggleButton_Unchecked(object sender, RoutedEventArgs e)
+    private void OverlayNameEditor_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
     {
-        if (_isSyncingWebViewFields)
+        if (sender is not System.Windows.Controls.TextBox textBox)
         {
             return;
         }
 
-        if (_WebViewOverlayWindow is null || !_WebViewOverlayWindow.IsEditMode)
+        if (e.Key == Key.Enter || e.Key == Key.Escape)
         {
-            return;
+            textBox.MoveFocus(new TraversalRequest(FocusNavigationDirection.Next));
         }
-
-        _WebViewOverlayWindow.ExitEditMode(saveChanges: true);
-        SyncWebViewFieldsFromSettings();
-        _settings.Save();
-        SettingsSaved?.Invoke(this, _settings);
     }
 
-    private void WebViewPositionTextBox_TextChanged(object sender, TextChangedEventArgs e)
+    private void OverlayContextDelete_Click(object sender, RoutedEventArgs e)
     {
-        if (_isSyncingWebViewFields || _WebViewOverlayWindow is null)
+        if (sender is not MenuItem menuItem
+            || menuItem.Parent is not ContextMenu contextMenu
+            || contextMenu.PlacementTarget is not FrameworkElement placementTarget
+            || placementTarget.DataContext is not OverlayItemSettings overlay)
         {
             return;
         }
 
-        if (!TryParseWebViewGeometry(out var x, out var y, out var width, out var height))
+        DeleteOverlay(overlay);
+    }
+
+    private void ApplyOverlayUrlButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (!TryGetOverlayFromElement(sender, out var overlay))
         {
             return;
         }
 
-        _settings.WebViewX = x;
-        _settings.WebViewY = y;
-        _settings.WebViewWidth = width;
-        _settings.WebViewHeight = height;
-        _WebViewOverlayWindow.ApplyGeometry(x, y, width, height);
-        _WebViewGeometrySaveTimer.Stop();
-        _WebViewGeometrySaveTimer.Start();
-    }
-
-    private void SaveWebViewGeometryChanges()
-    {
-        _WebViewGeometrySaveTimer.Stop();
-        _settings.Save();
-        WebViewGeometryChanged?.Invoke(this, _settings);
-    }
-
-    private void ResetWebViewPositionButton_Click(object sender, RoutedEventArgs e)
-    {
-        _settings.ResetWebViewToDefault();
-        SyncWebViewFieldsFromSettings();
-
-        if (_WebViewOverlayWindow is not null)
+        overlay.Url = overlay.Url.Trim();
+        if (string.IsNullOrWhiteSpace(overlay.Url))
         {
-            _WebViewOverlayWindow.ApplyGeometry(_settings.WebViewX, _settings.WebViewY, _settings.WebViewWidth, _settings.WebViewHeight);
+            return;
         }
 
-        _settings.Save();
-        SettingsSaved?.Invoke(this, _settings);
+        if (_overlayWindows.TryGetValue(overlay.Id, out var window))
+        {
+            window.NavigateToUrl(overlay.Url);
+        }
+
+        SaveSettings();
+    }
+
+    private void OverlayEditModeToggleButton_Checked(object sender, RoutedEventArgs e)
+    {
+        if (_isRefreshingOverlayUi || !TryGetOverlayFromElement(sender, out var overlay))
+        {
+            return;
+        }
+
+        if (!_overlayWindows.TryGetValue(overlay.Id, out var window))
+        {
+            SetOverlayEditToggleState(overlay.Id, false);
+            return;
+        }
+
+        ExpandOverlayExpander(overlay.Id);
+        if (!window.IsEditMode)
+        {
+            window.BeginEditMode();
+            window.ApplyGeometry(overlay.X, overlay.Y, overlay.Width, overlay.Height);
+        }
+    }
+
+    private void OverlayEditModeToggleButton_Unchecked(object sender, RoutedEventArgs e)
+    {
+        if (_isRefreshingOverlayUi || !TryGetOverlayFromElement(sender, out var overlay))
+        {
+            return;
+        }
+
+        if (_overlayWindows.TryGetValue(overlay.Id, out var window) && window.IsEditMode)
+        {
+            window.ExitEditMode(saveChanges: true);
+        }
+
+        SaveSettings();
+    }
+
+    private void OverlayGeometryTextBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (_isRefreshingOverlayUi || !TryGetOverlayFromElement(sender, out var overlay))
+        {
+            return;
+        }
+
+        if (_overlayWindows.TryGetValue(overlay.Id, out var window))
+        {
+            window.ApplyGeometry(overlay.X, overlay.Y, overlay.Width, overlay.Height);
+        }
+
+        SaveSettings();
+    }
+
+    private void OverlayEnabledToggleButton_Checked(object sender, RoutedEventArgs e)
+    {
+        SaveSettingsIfOverlay(sender);
+    }
+
+    private void OverlayEnabledToggleButton_Unchecked(object sender, RoutedEventArgs e)
+    {
+        SaveSettingsIfOverlay(sender);
+    }
+
+    private void OverlayTransparencyToggleButton_Checked(object sender, RoutedEventArgs e)
+    {
+        if (!TryGetOverlayFromElement(sender, out var overlay))
+        {
+            return;
+        }
+
+        overlay.TransparencyEnabled = true;
+        SaveSettings();
+        RefreshOverlayUi();
+    }
+
+    private void OverlayTransparencyToggleButton_Unchecked(object sender, RoutedEventArgs e)
+    {
+        if (!TryGetOverlayFromElement(sender, out _))
+        {
+            return;
+        }
+
+        SaveSettings();
+    }
+
+    private void OverlayInteractionToggleButton_Checked(object sender, RoutedEventArgs e)
+    {
+        if (!TryGetOverlayFromElement(sender, out var overlay))
+        {
+            return;
+        }
+
+        overlay.InteractionEnabled = true;
+        overlay.TransparencyEnabled = false;
+        SaveSettings();
+        RefreshOverlayUi();
+    }
+
+    private void OverlayInteractionToggleButton_Unchecked(object sender, RoutedEventArgs e)
+    {
+        if (!TryGetOverlayFromElement(sender, out _))
+        {
+            return;
+        }
+
+        SaveSettings();
+        RefreshOverlayUi();
+    }
+
+    private void OverlayShiftRightClickEditToggleButton_Checked(object sender, RoutedEventArgs e)
+    {
+        SaveSettingsIfOverlay(sender);
+    }
+
+    private void OverlayShiftRightClickEditToggleButton_Unchecked(object sender, RoutedEventArgs e)
+    {
+        SaveSettingsIfOverlay(sender);
+    }
+
+    private void OverlayDragHandle_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is not FrameworkElement handle || handle.DataContext is not OverlayItemSettings overlay)
+        {
+            return;
+        }
+
+        _draggedOverlay = overlay;
+        _overlayOrderChanged = false;
+        ShowOverlayDragPopup(overlay, e.GetPosition(this));
+        handle.CaptureMouse();
+        e.Handled = true;
+    }
+
+    private void OverlayDragHandle_PreviewMouseMove(object sender, System.Windows.Input.MouseEventArgs e)
+    {
+        if (_draggedOverlay is null || e.LeftButton != MouseButtonState.Pressed)
+        {
+            return;
+        }
+
+        var currentPoint = e.GetPosition(OverlayItemsControl);
+        UpdateOverlayDragPopup(e.GetPosition(this));
+        var index = _overlayItems.IndexOf(_draggedOverlay);
+        if (index < 0)
+        {
+            return;
+        }
+
+        var targetIndex = FindOverlayDropIndex(currentPoint, index);
+        if (targetIndex == index)
+        {
+            return;
+        }
+
+        var previousPositions = CaptureOverlayItemPositions();
+        _overlayItems.Move(index, targetIndex);
+        AnimateOverlayItemReordering(previousPositions);
+        _overlayOrderChanged = true;
+    }
+
+    private void OverlayDragHandle_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        _draggedOverlay = null;
+        CloseOverlayDragPopup();
+        if (sender is UIElement element)
+        {
+            element.ReleaseMouseCapture();
+        }
+
+        if (_overlayOrderChanged)
+        {
+            SaveSettings();
+        }
+
+        _overlayOrderChanged = false;
+    }
+
+    private void MoveOverlayUpButton_Click(object sender, RoutedEventArgs e)
+    {
+        MoveOverlay(sender, -1);
+    }
+
+    private int FindOverlayDropIndex(System.Windows.Point currentPoint, int currentIndex)
+    {
+        for (var i = 0; i < _overlayItems.Count; i++)
+        {
+            if (OverlayItemsControl.ItemContainerGenerator.ContainerFromItem(_overlayItems[i]) is not FrameworkElement container)
+            {
+                continue;
+            }
+
+            var top = container.TranslatePoint(new System.Windows.Point(0, 0), OverlayItemsControl).Y;
+            if (currentPoint.Y < top + container.ActualHeight / 2d)
+            {
+                return i > currentIndex ? i - 1 : i;
+            }
+        }
+
+        return _overlayItems.Count - 1;
+    }
+
+    private Dictionary<string, double> CaptureOverlayItemPositions()
+    {
+        var positions = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+        foreach (var overlay in _overlayItems)
+        {
+            if (OverlayItemsControl.ItemContainerGenerator.ContainerFromItem(overlay) is FrameworkElement container)
+            {
+                positions[overlay.Id] = container.TranslatePoint(new System.Windows.Point(0, 0), OverlayItemsControl).Y;
+            }
+        }
+
+        return positions;
+    }
+
+    private void AnimateOverlayItemReordering(IReadOnlyDictionary<string, double> previousPositions)
+    {
+        Dispatcher.BeginInvoke(() =>
+        {
+            foreach (var overlay in _overlayItems)
+            {
+                if (_draggedOverlay == overlay
+                    || !previousPositions.TryGetValue(overlay.Id, out var previousTop)
+                    || OverlayItemsControl.ItemContainerGenerator.ContainerFromItem(overlay) is not FrameworkElement container)
+                {
+                    continue;
+                }
+
+                var currentTop = container.TranslatePoint(new System.Windows.Point(0, 0), OverlayItemsControl).Y;
+                var offset = previousTop - currentTop;
+                if (Math.Abs(offset) < 1d)
+                {
+                    continue;
+                }
+
+                var transform = new TranslateTransform(0, offset);
+                container.RenderTransform = transform;
+                transform.BeginAnimation(
+                    TranslateTransform.YProperty,
+                    new DoubleAnimation(offset, 0d, TimeSpan.FromMilliseconds(160))
+                    {
+                        EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+                    });
+            }
+        }, DispatcherPriority.Render);
+    }
+
+    private void ShowOverlayDragPopup(OverlayItemSettings overlay, System.Windows.Point position)
+    {
+        _overlayDragPopup = new Popup
+        {
+            AllowsTransparency = true,
+            IsHitTestVisible = false,
+            PlacementTarget = this,
+            Placement = PlacementMode.Relative,
+            Child = new Border
+            {
+                Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(0xD9, 0x2B, 0x2F, 0x36)),
+                BorderBrush = new SolidColorBrush(System.Windows.Media.Color.FromRgb(0x58, 0x65, 0xF2)),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(6),
+                Padding = new Thickness(12, 7, 12, 7),
+                Opacity = 0.68,
+                Child = new TextBlock
+                {
+                    Text = overlay.Name,
+                    Foreground = System.Windows.Media.Brushes.White,
+                    FontWeight = FontWeights.SemiBold
+                }
+            }
+        };
+
+        UpdateOverlayDragPopup(position);
+        _overlayDragPopup.IsOpen = true;
+    }
+
+    private void UpdateOverlayDragPopup(System.Windows.Point position)
+    {
+        if (_overlayDragPopup is null)
+        {
+            return;
+        }
+
+        _overlayDragPopup.HorizontalOffset = position.X + 12;
+        _overlayDragPopup.VerticalOffset = position.Y + 12;
+    }
+
+    private void CloseOverlayDragPopup()
+    {
+        if (_overlayDragPopup is null)
+        {
+            return;
+        }
+
+        _overlayDragPopup.IsOpen = false;
+        _overlayDragPopup = null;
+    }
+
+    private void MoveOverlayDownButton_Click(object sender, RoutedEventArgs e)
+    {
+        MoveOverlay(sender, 1);
+    }
+
+    private void DeleteOverlayButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (!TryGetOverlayFromElement(sender, out var overlay))
+        {
+            return;
+        }
+
+        DeleteOverlay(overlay);
+    }
+
+    private void DeleteOverlay(OverlayItemSettings overlay)
+    {
+        _overlayItems.Remove(overlay);
+        _settings.OverlayItems.Remove(overlay);
+        _expanderStates.Remove(overlay.Id);
+        SaveSettings();
+        RefreshOverlayUi();
+    }
+
+    private void AddOverlayButton_Click(object sender, RoutedEventArgs e)
+    {
+        var overlay = new OverlayItemSettings
+        {
+            Name = $"Overlay {_overlayItems.Count + 1}",
+            Url = string.Empty,
+            X = AppSettings.GetDefaultWebViewX(),
+            Y = AppSettings.GetDefaultWebViewY(),
+            Width = 300d,
+            Height = 300d
+        };
+
+        _overlayItems.Add(overlay);
+        _settings.OverlayItems.Add(overlay);
+        _expanderStates[overlay.Id] = true;
+        SaveSettings();
+        RefreshOverlayUi();
+    }
+
+    private void OverlayScrollViewer_Loaded(object sender, RoutedEventArgs e)
+    {
+        SyncOverlayScrollBar();
+    }
+
+    private void OverlayScrollViewer_ScrollChanged(object sender, ScrollChangedEventArgs e)
+    {
+        SyncOverlayScrollBar();
+    }
+
+    private void OverlayScrollBar_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (Math.Abs(OverlayScrollViewer.VerticalOffset - e.NewValue) > 0.1d)
+        {
+            OverlayScrollViewer.ScrollToVerticalOffset(e.NewValue);
+        }
+    }
+
+    private void SyncOverlayScrollBar()
+    {
+        if (OverlayScrollViewer is null || OverlayScrollBar is null)
+        {
+            return;
+        }
+
+        var canScroll = OverlayScrollViewer.ScrollableHeight > 0;
+        OverlayScrollBar.Visibility = canScroll ? Visibility.Visible : Visibility.Collapsed;
+        OverlayScrollBar.Maximum = OverlayScrollViewer.ScrollableHeight;
+        OverlayScrollBar.ViewportSize = OverlayScrollViewer.ViewportHeight;
+
+        if (Math.Abs(OverlayScrollBar.Value - OverlayScrollViewer.VerticalOffset) > 0.1d)
+        {
+            OverlayScrollBar.Value = OverlayScrollViewer.VerticalOffset;
+        }
+    }
+
+    private void OverlayExpander_Expanded(object sender, RoutedEventArgs e)
+    {
+        if (sender is Expander expander && expander.Tag is string overlayId)
+        {
+            _expanderStates[overlayId] = true;
+            SetOverlayNameEditingState(expander, true);
+        }
+    }
+
+    private void OverlayExpander_Collapsed(object sender, RoutedEventArgs e)
+    {
+        if (sender is Expander expander && expander.Tag is string overlayId)
+        {
+            _expanderStates[overlayId] = false;
+            SetOverlayNameEditingState(expander, false);
+        }
+    }
+
+    private static void SetOverlayNameEditingState(Expander expander, bool isEditing)
+    {
+        if (expander.Header is not Grid header)
+        {
+            return;
+        }
+
+        var nameDisplay = FindVisualChildren<TextBlock>(header)
+            .FirstOrDefault(textBlock => textBlock.Tag is string tag && string.Equals(tag, "OverlayNameDisplay", StringComparison.Ordinal));
+        var nameEditor = FindVisualChildren<System.Windows.Controls.TextBox>(header)
+            .FirstOrDefault(textBox => textBox.Tag is string tag && string.Equals(tag, "OverlayNameEditor", StringComparison.Ordinal));
+        if (nameDisplay is not null)
+        {
+            nameDisplay.Visibility = isEditing ? Visibility.Collapsed : Visibility.Visible;
+        }
+
+        if (nameEditor is not null)
+        {
+            nameEditor.Visibility = isEditing ? Visibility.Visible : Visibility.Collapsed;
+        }
     }
 
     private void InitializeLanguageOptions()
@@ -605,18 +854,22 @@ public partial class SettingsWindow : Window
         OutputVolumeTextBlock.Text = text.OutputVolume;
         MonitorEnabledCheckBox.Content = text.MonitorSound;
 
-        WebUrlTextBlock.Text = text.WebUrl;
-        ApplyWebViewUrlButton.Content = text.Apply;
-        WebViewEditModeToggleButton.Content = text.EditMode;
-        WebViewXTextBlock.Text = text.AxisX;
-        WebViewYTextBlock.Text = text.AxisY;
-        WebViewWidthTextBlock.Text = text.SizeWidth;
-        WebViewHeightTextBlock.Text = text.SizeHeight;
-
         NewVersionTextBlock.Text = text.NewVersionAvailable;
         CloseButton.Content = text.Close;
+        AddOverlayButton.Content = text.AddOverlay;
 
         InitializeLanguageOptions();
+        Dispatcher.BeginInvoke(RefreshOverlayUi, DispatcherPriority.Loaded);
+    }
+
+    private void OverlayItemsControl_ItemContainerGenerator_StatusChanged(object? sender, EventArgs e)
+    {
+        _isOverlayContainersGenerating = OverlayItemsControl.ItemContainerGenerator.Status == System.Windows.Controls.Primitives.GeneratorStatus.GeneratingContainers;
+
+        if (OverlayItemsControl.ItemContainerGenerator.Status == System.Windows.Controls.Primitives.GeneratorStatus.ContainersGenerated)
+        {
+            Dispatcher.BeginInvoke(RefreshOverlayUi, DispatcherPriority.Loaded);
+        }
     }
 
     private void LanguageComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -661,109 +914,204 @@ public partial class SettingsWindow : Window
         _settings.OutputVolume = OutputVolumeSlider.Value;
         _settings.MonitorEnabled = MonitorEnabledCheckBox.IsChecked == true;
         _settings.AutoStart = AutoStartToggleButton.IsChecked == true;
-        _settings.WebViewUrl = WebViewUrlTextBox.Text.Trim();
         _settings.WebViewEnabled = WebViewToggleButton.IsChecked == true;
-
-        if (TryParseWebViewGeometry(out var x, out var y, out var width, out var height))
-        {
-            _settings.WebViewX = x;
-            _settings.WebViewY = y;
-            _settings.WebViewWidth = width;
-            _settings.WebViewHeight = height;
-        }
-
+        _settings.OverlayItems = _overlayItems.ToList();
         _settings.Save();
         SettingsSaved?.Invoke(this, _settings);
     }
 
-    private void SyncWebViewFieldsFromOverlayGeometry()
+    private void SaveSettingsIfInitialized()
     {
-        if (_WebViewOverlayWindow is null)
+        if (_isInitializingCoreFields)
         {
             return;
         }
 
-        _isSyncingWebViewFields = true;
+        SaveSettings();
+    }
+
+    private void SaveSettingsIfOverlay(object sender)
+    {
+        if (!TryGetOverlayFromElement(sender, out _))
+        {
+            return;
+        }
+
+        SaveSettings();
+    }
+
+    private void RefreshOverlayUi()
+    {
+        if (OverlayItemsControl is null || _isOverlayContainersGenerating || _isRefreshingOverlayUi)
+        {
+            return;
+        }
+
+        _isRefreshingOverlayUi = true;
         try
         {
-            var bounds = _WebViewOverlayWindow.GetGeometryInPixels();
-            SetTextPreservingCaret((System.Windows.Controls.TextBox)WebViewXTextBox, bounds.X.ToString(CultureInfo.InvariantCulture));
-            SetTextPreservingCaret((System.Windows.Controls.TextBox)WebViewYTextBox, bounds.Y.ToString(CultureInfo.InvariantCulture));
-            SetTextPreservingCaret((System.Windows.Controls.TextBox)WebViewWidthTextBox, bounds.Width.ToString(CultureInfo.InvariantCulture));
-            SetTextPreservingCaret((System.Windows.Controls.TextBox)WebViewHeightTextBox, bounds.Height.ToString(CultureInfo.InvariantCulture));
+            foreach (var expander in FindVisualChildren<Expander>(OverlayItemsControl))
+            {
+                if (expander.Tag is string overlayId && _expanderStates.TryGetValue(overlayId, out var expanded))
+                {
+                    expander.IsExpanded = expanded;
+                }
+            }
         }
         finally
         {
-            _isSyncingWebViewFields = false;
+            _isRefreshingOverlayUi = false;
         }
+
+        Dispatcher.BeginInvoke(SyncOverlayScrollBar, DispatcherPriority.Loaded);
     }
 
-    private void SyncWebViewFieldsFromSettings()
+    private void OverlayLocalizedElement_Loaded(object sender, RoutedEventArgs e)
     {
-        _isSyncingWebViewFields = true;
-        try
-        {
-            SetTextPreservingCaret((System.Windows.Controls.TextBox)WebViewUrlTextBox, _settings.WebViewUrl);
-            SetTextPreservingCaret((System.Windows.Controls.TextBox)WebViewXTextBox, _settings.WebViewX.ToString(CultureInfo.InvariantCulture));
-            SetTextPreservingCaret((System.Windows.Controls.TextBox)WebViewYTextBox, _settings.WebViewY.ToString(CultureInfo.InvariantCulture));
-            SetTextPreservingCaret((System.Windows.Controls.TextBox)WebViewWidthTextBox, _settings.WebViewWidth.ToString(CultureInfo.InvariantCulture));
-            SetTextPreservingCaret((System.Windows.Controls.TextBox)WebViewHeightTextBox, _settings.WebViewHeight.ToString(CultureInfo.InvariantCulture));
-        }
-        finally
-        {
-            _isSyncingWebViewFields = false;
-        }
-    }
-
-    private static void SetTextPreservingCaret(System.Windows.Controls.TextBox textBox, string value)
-    {
-        if (textBox is null)
+        if (sender is not FrameworkElement element)
         {
             return;
         }
 
-        if (string.Equals(textBox.Text, value, StringComparison.Ordinal))
+        var text = LocalizationService.Text;
+
+        switch (element)
+        {
+            case TextBlock textBlock when textBlock.Name == "WebUrlTextBlock":
+                textBlock.Text = text.WebUrl;
+                break;
+            case TextBlock textBlock when textBlock.Name == "WebViewXTextBlock":
+                textBlock.Text = text.AxisX;
+                break;
+            case TextBlock textBlock when textBlock.Name == "WebViewYTextBlock":
+                textBlock.Text = text.AxisY;
+                break;
+            case TextBlock textBlock when textBlock.Name == "WebViewWidthTextBlock":
+                textBlock.Text = text.SizeWidth;
+                break;
+            case TextBlock textBlock when textBlock.Name == "WebViewHeightTextBlock":
+                textBlock.Text = text.SizeHeight;
+                break;
+            case ToggleButton toggle when toggle.Name == "TransparencyToggleButton":
+                toggle.Content = text.OverlayTransparency;
+                if (toggle.DataContext is OverlayItemSettings overlay)
+                {
+                    toggle.IsEnabled = !overlay.InteractionEnabled;
+                }
+                break;
+            case ToggleButton toggle when toggle.Name == "InteractionToggleButton":
+                toggle.Content = text.OverlayInteractionMode;
+                break;
+            case ToggleButton toggle when toggle.Name == "ShiftRightClickEditToggleButton":
+                toggle.Content = text.OverlayShiftRightClickEdit;
+                break;
+            case ToggleButton toggle when toggle.Tag is string:
+                toggle.Content = text.EditMode;
+                break;
+            case System.Windows.Controls.Button button when button.Width == 70:
+                button.Content = text.Apply;
+                break;
+        }
+    }
+
+    private void ExpandOverlayExpander(string overlayId)
+    {
+        _expanderStates[overlayId] = true;
+        RefreshOverlayUi();
+    }
+
+    private void SetOverlayEditToggleState(string overlayId, bool isChecked)
+    {
+        foreach (var toggle in FindVisualChildren<ToggleButton>(OverlayItemsControl))
+        {
+            if (toggle.Tag is string currentId && string.Equals(currentId, overlayId, StringComparison.OrdinalIgnoreCase))
+            {
+                toggle.IsChecked = isChecked;
+            }
+        }
+    }
+
+    private void MoveOverlay(object sender, int direction)
+    {
+        if (!TryGetOverlayFromElement(sender, out var overlay))
         {
             return;
         }
 
-        var caretIndex = textBox.CaretIndex;
-        if (caretIndex < 0)
+        var currentIndex = _overlayItems.IndexOf(overlay);
+        if (currentIndex < 0)
         {
-            caretIndex = textBox.Text.Length;
+            return;
         }
 
-        textBox.Text = value;
-        textBox.SelectionStart = Math.Min(caretIndex, textBox.Text.Length);
-        textBox.SelectionLength = 0;
+        var targetIndex = currentIndex + direction;
+        if (targetIndex < 0 || targetIndex >= _overlayItems.Count)
+        {
+            return;
+        }
+
+        _overlayItems.Move(currentIndex, targetIndex);
+        SaveSettings();
+        RefreshOverlayUi();
     }
 
-    private bool TryParseWebViewGeometry(out double x, out double y, out double width, out double height)
+    private void ExitAllEditModes()
     {
-        x = 0;
-        y = 0;
-        width = 300;
-        height = 300;
+        foreach (var window in _overlayWindows.Values.Where(window => window.IsEditMode))
+        {
+            window.ExitEditMode(saveChanges: true);
+        }
+    }
 
-        if (!double.TryParse(WebViewXTextBox.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out x)
-            || !double.TryParse(WebViewYTextBox.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out y)
-            || !double.TryParse(WebViewWidthTextBox.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out width)
-            || !double.TryParse(WebViewHeightTextBox.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out height)
-            || !double.IsFinite(x)
-            || !double.IsFinite(y)
-            || !double.IsFinite(width)
-            || !double.IsFinite(height)
-            || Math.Abs(x) > MaximumWebViewCoordinate
-            || Math.Abs(y) > MaximumWebViewCoordinate
-            || width < MinimumWebViewSize
-            || width > MaximumWebViewSize
-            || height < MinimumWebViewSize
-            || height > MaximumWebViewSize)
+    private bool TryGetOverlayFromElement(object? element, out OverlayItemSettings overlay)
+    {
+        overlay = null!;
+
+        if (element is not FrameworkElement frameworkElement)
         {
             return false;
         }
 
-        return true;
+        overlay = frameworkElement.DataContext as OverlayItemSettings
+            ?? FindVisualParent<FrameworkElement>(frameworkElement)?.DataContext as OverlayItemSettings
+            ?? null!;
+
+        return overlay is not null;
+    }
+
+    private static TParent? FindVisualParent<TParent>(DependencyObject child)
+        where TParent : DependencyObject
+    {
+        var current = VisualTreeHelper.GetParent(child);
+        while (current is not null)
+        {
+            if (current is TParent matched)
+            {
+                return matched;
+            }
+
+            current = VisualTreeHelper.GetParent(current);
+        }
+
+        return null;
+    }
+
+    private static IEnumerable<TChild> FindVisualChildren<TChild>(DependencyObject parent)
+        where TChild : DependencyObject
+    {
+        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, i);
+            if (child is TChild matched)
+            {
+                yield return matched;
+            }
+
+            foreach (var descendant in FindVisualChildren<TChild>(child))
+            {
+                yield return descendant;
+            }
+        }
     }
 
     private static List<VoiceOption> LoadVoiceOptions()
@@ -792,7 +1140,6 @@ public partial class SettingsWindow : Window
         }
         catch
         {
-            // SAPI5 음성이 없거나 접근할 수 없으면 OneCore 목록만 사용한다.
         }
 
         return voices
@@ -867,4 +1214,3 @@ public partial class SettingsWindow : Window
         }
     }
 }
-

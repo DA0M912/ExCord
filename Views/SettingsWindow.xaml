@@ -64,7 +64,188 @@
                 </Setter.Value>
             </Setter>
         </Style>
+
+        <Style x:Key="OverlayExpanderStyle" TargetType="Expander">
+            <Setter Property="MinHeight" Value="42"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Expander">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="#3A3F4B"
+                                BorderThickness="1"
+                                CornerRadius="6">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+                                <Grid Grid.Row="0" Margin="8,2,12,2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <ContentPresenter Grid.Column="0" ContentSource="Header" VerticalAlignment="Center"/>
+                                    <ToggleButton Grid.Column="1"
+                                                  Width="32"
+                                                  Height="32"
+                                                  Margin="10,0,0,0"
+                                                  VerticalAlignment="Center"
+                                                  Focusable="False"
+                                                  IsChecked="{Binding IsExpanded, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
+                                                  Background="Transparent"
+                                                  BorderThickness="0"
+                                                  Foreground="White"
+                                                  Padding="0">
+                                        <ToggleButton.Template>
+                                            <ControlTemplate TargetType="ToggleButton">
+                                                <Border Background="Transparent" Width="40" Height="32" VerticalAlignment="Center">
+                                                    <Path x:Name="Arrow"
+                                                          Width="22"
+                                                          Height="14"
+                                                          Fill="White"
+                                                          HorizontalAlignment="Center"
+                                                          VerticalAlignment="Center"
+                                                          Data="M 0 0 L 14 0 L 7 10 Z"/>
+                                                </Border>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsChecked" Value="True">
+                                                        <Setter TargetName="Arrow" Property="RenderTransform">
+                                                            <Setter.Value>
+                                                                <RotateTransform Angle="180" CenterX="7" CenterY="5"/>
+                                                            </Setter.Value>
+                                                        </Setter>
+                                                    </Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </ToggleButton.Template>
+                                    </ToggleButton>
+                                </Grid>
+                                <Border x:Name="ContentBorder"
+                                        Grid.Row="1"
+                                        Padding="10,0,10,10"
+                                        Visibility="Collapsed">
+                                    <ContentPresenter ContentSource="Content"/>
+                                </Border>
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsExpanded" Value="True">
+                                <Setter TargetName="ContentBorder" Property="Visibility" Value="Visible"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="OverlayEnabledSwitchStyle" TargetType="ToggleButton">
+            <Setter Property="Width" Value="42"/>
+            <Setter Property="Height" Value="22"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Background" Value="#4E5058"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="Track" Background="{TemplateBinding Background}" CornerRadius="11">
+                            <Ellipse x:Name="Thumb"
+                                     Width="16"
+                                     Height="16"
+                                     Margin="3"
+                                     HorizontalAlignment="Left"
+                                     Fill="White"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Track" Property="Background" Value="#5865F2"/>
+                                <Setter TargetName="Thumb" Property="HorizontalAlignment" Value="Right"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Track" Property="Opacity" Value="0.85"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="OverlayListScrollBarStyle" TargetType="ScrollBar">
+            <Setter Property="Width" Value="2"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Cursor" Value="Arrow"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ScrollBar">
+                        <Grid Background="Transparent">
+                            <Track x:Name="PART_Track" IsDirectionReversed="True" Focusable="False">
+                                <Track.Thumb>
+                                    <Thumb>
+                                        <Thumb.Template>
+                                            <ControlTemplate TargetType="Thumb">
+                                                <Border Background="#E8ECF3"
+                                                        CornerRadius="1"
+                                                        Width="2"
+                                                        HorizontalAlignment="Right"
+                                                        SnapsToDevicePixels="True"/>
+                                            </ControlTemplate>
+                                        </Thumb.Template>
+                                    </Thumb>
+                                </Track.Thumb>
+                            </Track>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="OverlayContextMenuStyle" TargetType="ContextMenu">
+            <Setter Property="Background" Value="#2B2F36"/>
+            <Setter Property="BorderBrush" Value="#3A3F4B"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="SnapsToDevicePixels" Value="True"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ContextMenu">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="6"
+                                Padding="4">
+                            <ItemsPresenter/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="OverlayDeleteMenuItemStyle" TargetType="MenuItem">
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Padding" Value="12,8"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="MenuItem">
+                        <Border x:Name="Bd"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="Transparent"
+                                BorderThickness="1"
+                                CornerRadius="4"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter ContentSource="Header" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsHighlighted" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#3A3F4B"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="#5865F2"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Window.Resources>
+
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="*"/>
@@ -74,7 +255,7 @@
         <Grid Grid.Row="0" Margin="18">
             <TabControl x:Name="MainTabControl" Background="#20232A" BorderBrush="#3A3F4B" BorderThickness="1">
                 <TabItem x:Name="WebViewTabItem" Header="" Background="#20232A" Foreground="White">
-                    <StackPanel Margin="0,12,0,0">
+                    <Grid Margin="0,12,0,0">
                         <Border x:Name="WebViewContentPanel"
                                 Margin="0"
                                 Padding="0"
@@ -103,47 +284,207 @@
                                 </Style>
                             </Border.Style>
 
-                            <StackPanel>
-                                <TextBlock x:Name="WebUrlTextBlock" Text="" FontWeight="Bold" Margin="0,0,0,8" Foreground="White"/>
-                                <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
-                                    <TextBox x:Name="WebViewUrlTextBox" Width="260" Background="#2B2F36" Foreground="White"/>
-                                    <Button x:Name="ApplyWebViewUrlButton" Content="" Width="70" Margin="8,0,0,0" Click="ApplyWebViewUrlButton_Click" Background="#3A3F4B" Foreground="White"/>
-                                </StackPanel>
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="*"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
 
-                                <ToggleButton x:Name="WebViewEditModeToggleButton"
-                                              Content=""
-                                              Width="120"
-                                              HorizontalAlignment="Left"
-                                              Margin="0,0,0,16"
-                                              Checked="WebViewEditModeToggleButton_Checked"
-                                              Unchecked="WebViewEditModeToggleButton_Unchecked"
-                                              Foreground="White"/>
+                                <Grid Grid.Row="0" ClipToBounds="False">
+                                    <ScrollViewer x:Name="OverlayScrollViewer"
+                                                  VerticalScrollBarVisibility="Hidden"
+                                                  HorizontalScrollBarVisibility="Disabled"
+                                                  Padding="0"
+                                                  Margin="0"
+                                                  Loaded="OverlayScrollViewer_Loaded"
+                                                  ScrollChanged="OverlayScrollViewer_ScrollChanged">
+                                        <ItemsControl x:Name="OverlayItemsControl"
+                                                      HorizontalAlignment="Stretch">
+                                            <ItemsControl.ItemContainerStyle>
+                                                <Style TargetType="ContentPresenter">
+                                                    <Setter Property="HorizontalAlignment" Value="Stretch"/>
+                                                </Style>
+                                            </ItemsControl.ItemContainerStyle>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Expander Margin="0,0,0,10"
+                                                          Style="{StaticResource OverlayExpanderStyle}"
+                                                          Expanded="OverlayExpander_Expanded"
+                                                          Collapsed="OverlayExpander_Collapsed"
+                                                          Tag="{Binding Id}"
+                                                          Background="#2B2F36"
+                                                          Foreground="White">
+                                                    <Expander.ContextMenu>
+                                                        <ContextMenu Style="{StaticResource OverlayContextMenuStyle}">
+                                                            <MenuItem Header="삭제"
+                                                                      Style="{StaticResource OverlayDeleteMenuItemStyle}"
+                                                                      Click="OverlayContextDelete_Click"/>
+                                                        </ContextMenu>
+                                                    </Expander.ContextMenu>
+                                                    <Expander.Header>
+                                                        <Grid Margin="0,2,0,2">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                                <ColumnDefinition Width="*"/>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                            </Grid.ColumnDefinitions>
 
-                                <Grid Margin="0,0,0,16">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="*"/>
-                                    </Grid.ColumnDefinitions>
-                                    <Grid.RowDefinitions>
-                                        <RowDefinition Height="Auto"/>
-                                        <RowDefinition Height="Auto"/>
-                                    </Grid.RowDefinitions>
+                                                            <Border Grid.Column="0"
+                                                                    Width="28"
+                                                                    Height="28"
+                                                                    Margin="0,0,10,0"
+                                                                    Background="Transparent"
+                                                                    Cursor="SizeNS"
+                                                                    Tag="{Binding Id}"
+                                                                    PreviewMouseLeftButtonDown="OverlayDragHandle_PreviewMouseLeftButtonDown"
+                                                                    PreviewMouseMove="OverlayDragHandle_PreviewMouseMove"
+                                                                    PreviewMouseLeftButtonUp="OverlayDragHandle_PreviewMouseLeftButtonUp">
+                                                                <TextBlock Text="☰"
+                                                                           FontSize="18"
+                                                                           Foreground="#D7DDE5"
+                                                                           HorizontalAlignment="Center"
+                                                                           VerticalAlignment="Center"/>
+                                                            </Border>
 
-                                    <TextBlock x:Name="WebViewXTextBlock" Grid.Row="0" Grid.Column="0" Text="" Margin="0,0,8,8" VerticalAlignment="Center" Foreground="White"/>
-                                    <TextBox x:Name="WebViewXTextBox" Grid.Row="0" Grid.Column="1" Margin="0,0,12,8" TextChanged="WebViewPositionTextBox_TextChanged" Background="#2B2F36" Foreground="White"/>
-                                    <TextBlock x:Name="WebViewYTextBlock" Grid.Row="0" Grid.Column="2" Text="" Margin="0,0,8,8" VerticalAlignment="Center" Foreground="White"/>
-                                    <TextBox x:Name="WebViewYTextBox" Grid.Row="0" Grid.Column="3" Margin="0,0,0,8" TextChanged="WebViewPositionTextBox_TextChanged" Background="#2B2F36" Foreground="White"/>
+                                                            <Grid Grid.Column="1" Margin="0,0,8,0">
+                                                                <TextBlock Text="{Binding Name}"
+                                                                           Tag="OverlayNameDisplay"
+                                                                           VerticalAlignment="Center"
+                                                                           Foreground="White"
+                                                                           Margin="0,0,26,0"/>
+                                                                <TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}"
+                                                                         Tag="OverlayNameEditor"
+                                                                         Visibility="Collapsed"
+                                                                         Background="#20232A"
+                                                                         Foreground="White"
+                                                                         BorderBrush="#5865F2"
+                                                                         BorderThickness="1"
+                                                                         Padding="6,3"
+                                                                         VerticalContentAlignment="Center"
+                                                                         TextChanged="OverlayNameTextBox_TextChanged"
+                                                                         KeyDown="OverlayNameEditor_KeyDown"/>
+                                                            </Grid>
 
-                                    <TextBlock x:Name="WebViewWidthTextBlock" Grid.Row="1" Grid.Column="0" Text="" Margin="0,0,8,0" VerticalAlignment="Center" Foreground="White"/>
-                                    <TextBox x:Name="WebViewWidthTextBox" Grid.Row="1" Grid.Column="1" Margin="0,0,12,0" TextChanged="WebViewPositionTextBox_TextChanged" Background="#2B2F36" Foreground="White"/>
-                                    <TextBlock x:Name="WebViewHeightTextBlock" Grid.Row="1" Grid.Column="2" Text="" Margin="0,0,8,0" VerticalAlignment="Center" Foreground="White"/>
-                                    <TextBox x:Name="WebViewHeightTextBox" Grid.Row="1" Grid.Column="3" Margin="0,0,0,0" TextChanged="WebViewPositionTextBox_TextChanged" Background="#2B2F36" Foreground="White"/>
-                                </Grid>
-                            </StackPanel>
+                                                            <ToggleButton Grid.Column="2"
+                                                                          Style="{StaticResource OverlayEnabledSwitchStyle}"
+                                                                          ToolTip="On/Off"
+                                                                          Margin="8,0,0,0"
+                                                                          IsChecked="{Binding Enabled}"
+                                                                          Checked="OverlayEnabledToggleButton_Checked"
+                                                                          Unchecked="OverlayEnabledToggleButton_Unchecked"/>
+                                                        </Grid>
+                                                    </Expander.Header>
+
+                                                    <StackPanel Margin="0,10,0,4">
+                                                        <TextBlock x:Name="WebUrlTextBlock"
+                                                                   Text=""
+                                                                   Loaded="OverlayLocalizedElement_Loaded"
+                                                                   FontWeight="Bold"
+                                                                   Margin="0,0,0,8"
+                                                                   Foreground="White"/>
+                                                        <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
+                                                            <TextBox Width="260"
+                                                                     Text="{Binding Url, UpdateSourceTrigger=PropertyChanged}"
+                                                                     Background="#20232A"
+                                                                     Foreground="White"
+                                                                     BorderBrush="#3A3F4B"
+                                                                     Tag="{Binding Id}"/>
+                                                            <Button Content=""
+                                                                    Loaded="OverlayLocalizedElement_Loaded"
+                                                                    Width="70"
+                                                                    Margin="8,0,0,0"
+                                                                    Click="ApplyOverlayUrlButton_Click"
+                                                                    Tag="{Binding Id}"
+                                                                    Background="#3A3F4B"
+                                                                    Foreground="White"/>
+                                                        </StackPanel>
+
+                                                        <ToggleButton Content=""
+                                                                      Loaded="OverlayLocalizedElement_Loaded"
+                                                                      Width="120"
+                                                                      HorizontalAlignment="Left"
+                                                                      Margin="0,0,0,16"
+                                                                      Checked="OverlayEditModeToggleButton_Checked"
+                                                                      Unchecked="OverlayEditModeToggleButton_Unchecked"
+                                                                      Tag="{Binding Id}"
+                                                                      Foreground="White"/>
+
+                                                        <Grid Margin="0,0,0,16">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                                <ColumnDefinition Width="*"/>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                                <ColumnDefinition Width="*"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <Grid.RowDefinitions>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                            </Grid.RowDefinitions>
+
+                                                            <TextBlock Grid.Row="0" Grid.Column="0" x:Name="WebViewXTextBlock" Text="" Loaded="OverlayLocalizedElement_Loaded" Margin="0,0,8,8" VerticalAlignment="Center" Foreground="White"/>
+                                                            <TextBox Grid.Row="0" Grid.Column="1" Margin="0,0,12,8" Text="{Binding X, UpdateSourceTrigger=PropertyChanged}" TextChanged="OverlayGeometryTextBox_TextChanged" Background="#20232A" Foreground="White" BorderBrush="#3A3F4B" Tag="X"/>
+                                                            <TextBlock Grid.Row="0" Grid.Column="2" x:Name="WebViewYTextBlock" Text="" Loaded="OverlayLocalizedElement_Loaded" Margin="0,0,8,8" VerticalAlignment="Center" Foreground="White"/>
+                                                            <TextBox Grid.Row="0" Grid.Column="3" Margin="0,0,0,8" Text="{Binding Y, UpdateSourceTrigger=PropertyChanged}" TextChanged="OverlayGeometryTextBox_TextChanged" Background="#20232A" Foreground="White" BorderBrush="#3A3F4B" Tag="Y"/>
+
+                                                            <TextBlock Grid.Row="1" Grid.Column="0" x:Name="WebViewWidthTextBlock" Text="" Loaded="OverlayLocalizedElement_Loaded" Margin="0,0,8,0" VerticalAlignment="Center" Foreground="White"/>
+                                                            <TextBox Grid.Row="1" Grid.Column="1" Margin="0,0,12,0" Text="{Binding Width, UpdateSourceTrigger=PropertyChanged}" TextChanged="OverlayGeometryTextBox_TextChanged" Background="#20232A" Foreground="White" BorderBrush="#3A3F4B" Tag="Width"/>
+                                                            <TextBlock Grid.Row="1" Grid.Column="2" x:Name="WebViewHeightTextBlock" Text="" Loaded="OverlayLocalizedElement_Loaded" Margin="0,0,8,0" VerticalAlignment="Center" Foreground="White"/>
+                                                            <TextBox Grid.Row="1" Grid.Column="3" Margin="0,0,0,0" Text="{Binding Height, UpdateSourceTrigger=PropertyChanged}" TextChanged="OverlayGeometryTextBox_TextChanged" Background="#20232A" Foreground="White" BorderBrush="#3A3F4B" Tag="Height"/>
+                                                        </Grid>
+
+                                                        <StackPanel>
+                                                            <ToggleButton x:Name="TransparencyToggleButton"
+                                                                          Content=""
+                                                                          Loaded="OverlayLocalizedElement_Loaded"
+                                                                          Margin="0,0,0,8"
+                                                                          HorizontalAlignment="Left"
+                                                                          IsChecked="{Binding TransparencyEnabled}"
+                                                                          Checked="OverlayTransparencyToggleButton_Checked"
+                                                                          Unchecked="OverlayTransparencyToggleButton_Unchecked"/>
+                                                            <ToggleButton x:Name="InteractionToggleButton"
+                                                                          Content=""
+                                                                          Loaded="OverlayLocalizedElement_Loaded"
+                                                                          Margin="0,0,0,8"
+                                                                          HorizontalAlignment="Left"
+                                                                          IsChecked="{Binding InteractionEnabled}"
+                                                                          Checked="OverlayInteractionToggleButton_Checked"
+                                                                          Unchecked="OverlayInteractionToggleButton_Unchecked"/>
+                                                            <ToggleButton x:Name="ShiftRightClickEditToggleButton"
+                                                                          Content=""
+                                                                          Loaded="OverlayLocalizedElement_Loaded"
+                                                                          HorizontalAlignment="Left"
+                                                                          IsChecked="{Binding ShiftRightClickEditEnabled}"
+                                                                          Checked="OverlayShiftRightClickEditToggleButton_Checked"
+                                                                          Unchecked="OverlayShiftRightClickEditToggleButton_Unchecked"/>
+                                                        </StackPanel>
+                                                    </StackPanel>
+                                                </Expander>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </ScrollViewer>
+                                        <ScrollBar x:Name="OverlayScrollBar"
+                                                   Style="{StaticResource OverlayListScrollBarStyle}"
+                                                   Orientation="Vertical"
+                                                   HorizontalAlignment="Right"
+                                                   VerticalAlignment="Stretch"
+                                                   Margin="0,0,-10,0"
+                                                   Panel.ZIndex="5"
+                                                   Visibility="Collapsed"
+                                                   ValueChanged="OverlayScrollBar_ValueChanged"/>
+                                    </Grid>
+
+                                    <Button x:Name="AddOverlayButton"
+                                        Grid.Row="1"
+                                        Content="+ 새 뷰어 추가"
+                                        Margin="0,12,0,0"
+                                        Height="34"
+                                        Click="AddOverlayButton_Click"
+                                        Background="#3A3F4B"
+                                        Foreground="White"/>
+                            </Grid>
                         </Border>
-                    </StackPanel>
+                    </Grid>
                 </TabItem>
 
                 <TabItem x:Name="TtsTabItem" Header="" Background="#20232A" Foreground="White">
@@ -310,4 +651,3 @@
         </StackPanel>
     </Grid>
 </Window>
-

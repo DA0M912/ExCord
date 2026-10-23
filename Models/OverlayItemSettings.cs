@@ -7,6 +7,8 @@ public sealed class OverlayItemSettings
     private const double MinimumSize = 80d;
     private const double MaximumSize = 10000d;
     private const double MaximumCoordinate = 100000d;
+    private bool _interactionEnabled = true;
+    private bool _transparencyEnabled = false;
 
     public string Id { get; set; } = Guid.NewGuid().ToString("N");
     public string Name { get; set; } = "Overlay 1";
@@ -16,6 +18,27 @@ public sealed class OverlayItemSettings
     public double Y { get; set; } = AppSettings.GetDefaultWebViewY();
     public double Width { get; set; } = DefaultWidth;
     public double Height { get; set; } = DefaultHeight;
+
+    public bool TransparencyEnabled
+    {
+        get => _transparencyEnabled;
+        set => _transparencyEnabled = _interactionEnabled ? false : value;
+    }
+
+    public bool InteractionEnabled
+    {
+        get => _interactionEnabled;
+        set
+        {
+            _interactionEnabled = value;
+            if (_interactionEnabled)
+            {
+                _transparencyEnabled = false;
+            }
+        }
+    }
+
+    public bool ShiftRightClickEditEnabled { get; set; } = true;
 
     public void ValidateAndNormalize(int index)
     {
@@ -29,6 +52,11 @@ public sealed class OverlayItemSettings
             : Name.Trim();
 
         Url ??= string.Empty;
+
+        if (InteractionEnabled && TransparencyEnabled)
+        {
+            TransparencyEnabled = false;
+        }
 
         if (!double.IsFinite(X) || Math.Abs(X) > MaximumCoordinate)
         {
